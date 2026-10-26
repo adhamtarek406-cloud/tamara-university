@@ -3181,6 +3181,7 @@ RENDER.certs=async()=>{
 const PL={eid:null,d:null,cur:null,vdone:new Set(),q:null,sc:null,fin:null,busy:false,
  reset(){ this.eid=null; this.d=null; this.cur=null; this.q=null; this.sc=null; this.fin=null; this.vdone=new Set(); }};
 async function openEnrollment(eid,lessonId){
+ const d0=await safe(()=>rpc('player_data',{p_enrollment:eid})); if(d0&&d0.lessons&&d0.lessons.length===1&&d0.lessons[0].ltype==='scorm'){ startScorm({eid,title:d0.program.title}); return; }
  PL.reset(); PL.eid=eid; PL.want=lessonId||null; go('player');
 }
 const curL=()=>PL.d.lessons.find(l=>l.id===PL.cur);
@@ -3592,11 +3593,138 @@ window.genCreate=async function(){ if(!LIVE.on) return _gc(); await ensureOrg();
  Object.assign(GEN,{step:1,doc:null,result:null,err:null,note:''}); ctab='overview'; openLes=null; LIVE.pe={id:res.id,learners:null,report:null,hist:null};
  go('builder'); toast('حُفظ الكورس كمسودة. راجعه ثم أرسله للاعتماد.'); };
 
-/* SCORM: package validation is real; hosting/playback for learners is not enabled */
+/* ---------- SCORM: real hosting + runtime ---------- */
+const SC={rt:null};
+const MIME={html:'text/html',htm:'text/html',css:'text/css',js:'text/javascript',mjs:'text/javascript',json:'application/json',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',svg:'image/svg+xml',webp:'image/webp',mp4:'video/mp4',webm:'video/webm',mp3:'audio/mpeg',wav:'audio/wav',ogg:'audio/ogg',woff:'font/woff',woff2:'font/woff2',ttf:'font/ttf',otf:'font/otf',xml:'application/xml',txt:'text/plain',ico:'image/x-icon',pdf:'application/pdf'};
+const mimeOf=n=>MIME[(n.split('.').pop()||'').toLowerCase()]||'application/octet-stream';
+const dirOf=p=>p.includes('/')?p.slice(0,p.lastIndexOf('/')+1):'';
+const normPath=p=>{ const out=[]; p.split('/').forEach(x=>{ if(x==='..') out.pop(); else if(x&&x!=='.') out.push(x); }); return out.join('/'); };
+const absUrl=u=>/^(data:|https?:|\/\/|#|blob:|javascript:|about:|mailto:)/i.test(u);
+async function pkgFetch(path){ const run=async retry=>{ const r=await fetch(URL_+'/storage/v1/object/authenticated/scorm/'+path,{headers:{apikey:KEY,Authorization:'Bearer '+(LIVE.tok&&LIVE.tok.at)}}); if(r.status===401&&retry&&await refresh()) return run(false); if(!r.ok) throw new Error('storage_'+r.status); return r.arrayBuffer(); }; return run(true); }
+async function pkgUpload(path,file){ const run=async retry=>{ const r=await fetch(URL_+'/storage/v1/object/scorm/'+path,{method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+(LIVE.tok&&LIVE.tok.at),'x-upsert':'true','Content-Type':'application/zip','cache-control':'3600'},body:file}); if(r.status===401&&retry&&await refresh()) return run(false); if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(r.status===413||/size|exceed/i.test(j.message||'')?'pkg_too_big':('upload_'+r.status+(j.message?': '+j.message:''))); } }; return run(true); }
+async function ensureZipLib(){ if(window.JSZip) return; await new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; sc.onload=res; sc.onerror=()=>rej(new Error('zip_lib')); document.head.appendChild(sc); }); }
+async function buildSrcdoc(zip,meta){
+ const names=Object.keys(zip.files).filter(n=>!zip.files[n].dir);
+ const man=names.filter(n=>/(^|\/)imsmanifest\.xml$/i.test(n)).sort((a,b)=>a.split('/').length-b.split('/').length)[0];
+ const base=man?dirOf(man):''; const launch=normPath(base+(meta.launch||'index.html').split('?')[0].split('#')[0]);
+ const file=zip.file(launch)||zip.file(names.find(n=>n.toLowerCase()===launch.toLowerCase())||'\0'); if(!file) throw new Error('launch_missing');
+ const cache=new Map();
+ const rewriteCss=async(css,dir)=>{ const re=/url\(\s*(['"]?)([^'")]+)\1\s*\)/g; let out='',last=0,m; const parts=[]; while((m=re.exec(css))) parts.push(m);
+  for(const x of parts){ out+=css.slice(last,x.index); last=x.index+x[0].length; const u=x[2]; if(absUrl(u)){ out+=x[0]; continue; } const b=await blobUrl(normPath(dir+u.split('?')[0].split('#')[0])); out+=b?`url("${b}")`:x[0]; } return out+css.slice(last); };
+ const blobUrl=path=>{ if(cache.has(path)) return cache.get(path); const f=zip.file(path); if(!f) return Promise.resolve(null);
+  const p=(async()=>{ const mt=mimeOf(path); const blob=mt==='text/css'?new Blob([await rewriteCss(await f.async('string'),dirOf(path))],{type:mt}):new Blob([await f.async('uint8array')],{type:mt}); return URL.createObjectURL(blob); })(); cache.set(path,p); return p; };
+ const html=await file.async('string'); const doc=new DOMParser().parseFromString(html,'text/html'); const ldir=dirOf(launch); let changed=0;
+ for(const [tag,at] of [['script','src'],['link','href'],['img','src'],['source','src'],['video','src'],['video','poster'],['audio','src'],['embed','src'],['image','href']]){
+  for(const el of doc.querySelectorAll(tag+'['+at+']')){ const u=el.getAttribute(at); if(!u||absUrl(u)) continue; const b=await blobUrl(normPath(ldir+u.split('?')[0].split('#')[0])); if(b){ el.setAttribute(at,b); changed++; } } }
+ for(const st of doc.querySelectorAll('style')){ const t=st.textContent; if(t.includes('url(')){ const n=await rewriteCss(t,ldir); if(n!==t){ st.textContent=n; changed++; } } }
+ const urls=await Promise.all([...cache.values()]);
+ return {html:changed?'<!DOCTYPE html>\n'+doc.documentElement.outerHTML:html,urls:urls.filter(Boolean)};
+}
+const pad=(n,w=2)=>String(Math.floor(n)).padStart(w,'0');
+const hms=sec=>`${pad(sec/3600,4)}:${pad(sec%3600/60)}:${pad(sec%60)}.00`;
+const isoDur=sec=>`PT${Math.floor(sec/3600)}H${Math.floor(sec%3600/60)}M${Math.floor(sec%60)}S`;
+function parseDur(v){ v=String(v||''); let m=v.match(/^(\d+):(\d{1,2}):(\d{1,2})(?:\.\d+)?$/); if(m) return +m[1]*3600+ +m[2]*60+ +m[3]; m=v.match(/^PT(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?$/); return m?Math.round((+m[1]||0)*3600+(+m[2]||0)*60+(+m[3]||0)):0; }
+const lastFirst=n=>{ const p=String(n||'').trim().split(/\s+/); return p.length>1?`${p.slice(1).join(' ')}, ${p[0]}`:(p[0]||''); };
+const ST_AR={'not attempted':'لم يبدأ',incomplete:'قيد التقدم',completed:'مكتمل',passed:'ناجح',failed:'لم ينجح',browsed:'تصفّح'};
+function makeAPI(rt){
+ const meta=rt.meta, v12=!/2004/.test(meta.ver||''), st=rt.info.state, pass=rt.info.program.pass_mark;
+ let inited=false, finished=false, err=0, t0=0; const cmi={};
+ if(v12) Object.assign(cmi,{'cmi.core.student_id':rt.info.learner.id,'cmi.core.student_name':lastFirst(rt.info.learner.name),'cmi.core.lesson_location':st.location||'','cmi.core.credit':rt.test?'no-credit':'credit','cmi.core.lesson_status':st.status||'not attempted','cmi.core.entry':st.entry==='resume'?'resume':'ab-initio','cmi.core.score.raw':st.score==null?'':String(st.score),'cmi.core.score.min':'0','cmi.core.score.max':'100','cmi.core.total_time':hms(st.total_seconds||0),'cmi.core.lesson_mode':'normal','cmi.suspend_data':st.suspend_data||'','cmi.launch_data':'','cmi.student_data.mastery_score':String(pass),'cmi.core.exit':'','cmi.core.session_time':'00:00:00.00'});
+ else { const s=st.status||'not attempted'; Object.assign(cmi,{'cmi.learner_id':rt.info.learner.id,'cmi.learner_name':lastFirst(rt.info.learner.name),'cmi.location':st.location||'','cmi.credit':rt.test?'no-credit':'credit','cmi.completion_status':s==='passed'||s==='completed'?'completed':s==='incomplete'||s==='failed'?'incomplete':'not attempted','cmi.success_status':s==='passed'?'passed':s==='failed'?'failed':'unknown','cmi.entry':st.entry==='resume'?'resume':'ab-initio','cmi.score.raw':st.score==null?'':String(st.score),'cmi.score.scaled':st.score==null?'':String(st.score/100),'cmi.score.min':'0','cmi.score.max':'100','cmi.total_time':isoDur(st.total_seconds||0),'cmi.mode':'normal','cmi.suspend_data':st.suspend_data||'','cmi.launch_data':'','cmi.scaled_passing_score':String(pass/100),'cmi.completion_threshold':'','cmi.exit':'','cmi.session_time':'PT0H0M0S'}); }
+ const RO12=new Set(['cmi.core.student_id','cmi.core.student_name','cmi.core.credit','cmi.core.entry','cmi.core.total_time','cmi.core.lesson_mode','cmi.launch_data','cmi.student_data.mastery_score']);
+ const RO04=new Set(['cmi.learner_id','cmi.learner_name','cmi.credit','cmi.entry','cmi.total_time','cmi.mode','cmi.launch_data','cmi.scaled_passing_score','cmi.completion_threshold']);
+ const WO=new Set(v12?['cmi.core.exit','cmi.core.session_time']:['cmi.exit','cmi.session_time']);
+ const out=()=>{ if(v12){ const s=cmi['cmi.core.lesson_status']; return {status:s,score:cmi['cmi.core.score.raw']}; }
+  const su=cmi['cmi.success_status'], c=cmi['cmi.completion_status']; let sc=cmi['cmi.score.raw']; if(sc===''&&cmi['cmi.score.scaled']!=='') sc=String(Math.round(+cmi['cmi.score.scaled']*100));
+  return {status:su==='passed'?'passed':su==='failed'?'failed':c==='completed'?'completed':c==='incomplete'?'incomplete':'not attempted',score:sc}; };
+ rt.snapshot=()=>({...out(),location:v12?cmi['cmi.core.lesson_location']:cmi['cmi.location'],suspend_data:cmi['cmi.suspend_data']});
+ const log=(c,r)=>{ rt.log.push({call:c,ret:String(r)}); if(rt.log.length>80) rt.log.shift(); rt.changed&&rt.changed(); };
+ const E=c=>{ err=c; return 'false'; }, ok=()=>{ err=0; return 'true'; };
+ const flush=(final,keep)=>{ const o=out(); const sec=final?(parseDur(v12?cmi['cmi.core.session_time']:cmi['cmi.session_time'])||Math.round((Date.now()-t0)/1000)):0; rt.flush({status:o.status,score:o.score,location:v12?cmi['cmi.core.lesson_location']:cmi['cmi.location'],suspend_data:cmi['cmi.suspend_data'],session_seconds:sec},keep); };
+ const init=()=>{ if(finished) return E(v12?101:104); if(inited) return E(v12?101:103); inited=true; t0=Date.now(); rt.started=true; return ok(); };
+ const get=k=>{ if(!inited) { E(v12?301:122); return ''; } if(WO.has(k)){ E(v12?404:405); return ''; } if(k in cmi){ err=0; return cmi[k]; }
+  if(/\._children$/.test(k)){ err=0; return v12?'student_id,student_name,lesson_location,credit,lesson_status,entry,score,total_time,exit,session_time':'learner_id,learner_name,location,completion_status,success_status,score'; }
+  if(/\._count$/.test(k)){ err=0; return '0'; } E(v12?201:401); return ''; };
+ const set=(k,val)=>{ if(!inited){ return E(v12?301:132); } val=String(val);
+  if((v12?RO12:RO04).has(k)) return E(v12?403:404);
+  if(!(k in cmi)) return E(v12?201:401);
+  if(v12){ if(k==='cmi.core.lesson_status'&&!['passed','completed','failed','incomplete','browsed','not attempted'].includes(val)) return E(405);
+   if(k==='cmi.core.score.raw'&&val!==''&&!(/^\d+(\.\d+)?$/.test(val)&&+val>=0&&+val<=100)) return E(405);
+   if(k==='cmi.core.exit'&&!['time-out','suspend','logout',''].includes(val)) return E(405);
+   if(k==='cmi.suspend_data'&&val.length>4096) return E(405); }
+  else { if(k==='cmi.completion_status'&&!['completed','incomplete','not attempted','unknown'].includes(val)) return E(406);
+   if(k==='cmi.success_status'&&!['passed','failed','unknown'].includes(val)) return E(406);
+   if(k==='cmi.score.scaled'&&val!==''&&!(+val>=-1&&+val<=1)) return E(406);
+   if(k==='cmi.suspend_data'&&val.length>64000) return E(405); }
+  cmi[k]=val; if(!v12&&k==='cmi.score.scaled'&&val!==''&&cmi['cmi.score.raw']==='') cmi['cmi.score.raw']=String(Math.round(+val*100)); return ok(); };
+ const commit=()=>{ if(!inited) return E(v12?301:142); flush(false); return ok(); };
+ const fin=()=>{ if(!inited) return E(v12?301:112); if(finished) return E(v12?101:113);
+  if(v12){ const o=out(); const sc=o.score; if(sc!==''&&!['passed','failed'].includes(o.status)&&['incomplete','completed','not attempted'].includes(o.status)&&o.status!=='not attempted'){ cmi['cmi.core.lesson_status']=+sc>=pass?'passed':'failed'; } }
+  finished=true; flush(true); return ok(); };
+ rt.finishNow=keep=>{ if(inited&&!finished){ finished=true; flush(true,keep); } };
+ const wrap=(n,f)=>(...a)=>{ const r=f(...a); log(`${n}(${a.map(x=>JSON.stringify(x)).join(', ')})`,JSON.stringify(r)); return r; };
+ const ERR={0:'No error',101:'General exception',201:'Invalid argument',301:'Not initialized',401:'Not implemented',403:'Element is read only',404:'Element is write only',405:'Incorrect data type',103:'Already initialized',104:'Content instance terminated',112:'Termination before initialization',113:'Termination after termination',122:'Retrieve data before initialization',132:'Store data before initialization',142:'Commit before initialization',406:'Data model element value out of range'};
+ const api=v12?{LMSInitialize:wrap('LMSInitialize',init),LMSFinish:wrap('LMSFinish',fin),LMSGetValue:wrap('LMSGetValue',get),LMSSetValue:wrap('LMSSetValue',set),LMSCommit:wrap('LMSCommit',commit),LMSGetLastError:()=>String(err),LMSGetErrorString:c=>ERR[c]||'',LMSGetDiagnostic:c=>ERR[c]||''}
+  :{Initialize:wrap('Initialize',init),Terminate:wrap('Terminate',fin),GetValue:wrap('GetValue',get),SetValue:wrap('SetValue',set),Commit:wrap('Commit',commit),GetLastError:()=>String(err),GetErrorString:c=>ERR[c]||'',GetDiagnostic:c=>ERR[c]||''};
+ return {api,v12};
+}
+function scUpdateSide(){ const rt=SC.rt, el=$('#sc-side'); if(!rt||!el) return; const snap=rt.snapshot?rt.snapshot():{status:(rt.info&&rt.info.state.status)||'not attempted',score:''};
+ const status=ST_AR[snap.status]||snap.status, pass=rt.info?rt.info.program.pass_mark:'–';
+ el.innerHTML=`<section class="panel"><h2>${rt.test?'وضع الاختبار':'تقدّمك'}</h2><p class="sub">${rt.test?'لا يُسجَّل شيء. تستخدم هذا الوضع لمعاينة الكورس.':'يتحدّث مع كل تفاعل ويُحفظ في حسابك.'}</p>
+  <dl class="track-tbl"><dt>الحالة</dt><dd>${esc(status)}</dd><dt>الدرجة</dt><dd>${snap.score!==''&&snap.score!=null?esc(snap.score)+'%':'–'}</dd><dt>النجاح من</dt><dd>${pass}%</dd></dl>
+  ${rt.completed?`<p class="insight" style="margin:14px 0 0">${rt.test?'سيُسجَّل الإتمام للمتعلم الحقيقي بهذه الطريقة.':'أكملت الكورس.'}${rt.cert?` شهادتك <code dir="ltr">${esc(rt.cert)}</code>.`:''}</p>`:''}</section>
+  <section class="panel"><h2>اتصال SCORM</h2><p class="sub">ما ترسله الحزمة للمنصة.</p><div class="apilog">${rt.log.slice(-25).map(l=>`<div><span>${esc(l.call)}</span> → ${esc(l.ret)}</div>`).join('')||'<div>لم يبدأ الاتصال بعد.</div>'}</div></section>`;
+ const lg=el.querySelector('.apilog'); if(lg) lg.scrollTop=lg.scrollHeight; }
+function stopScorm(){ const rt=SC.rt; if(!rt) return; try{ rt.finishNow&&rt.finishNow(false); }catch(_){} if(rt.pagehide) window.removeEventListener('pagehide',rt.pagehide); try{ delete window.API; delete window.API_1484_11; }catch(_){ window.API=undefined; window.API_1484_11=undefined; } (rt.urls||[]).forEach(u=>{ try{ URL.revokeObjectURL(u); }catch(_){} }); SC.rt=null; }
+async function bootScorm(rt){ const fr=$('#sc-frame'); const fail=(t,d)=>{ if(fr) fr.innerHTML=`<div class="err-box" style="margin:24px;max-width:520px"><b>${t}</b>${d||''}</div>`; };
+ try{
+  let info; if(rt.test){ info=await safe(()=>rpc('scorm_meta',{p_program:rt.programId})); if(info){ info.learner={id:'preview',name:'وضع الاختبار'}; info.state={status:'not attempted',score:null,suspend_data:'',location:'',total_seconds:0,entry:'ab-initio'}; } }
+  else info=await safe(()=>rpc('scorm_open',{p_enrollment:rt.eid}));
+  if(!info) return fail('تعذّر فتح الكورس','تحقق من أنك مسجّل فيه وحاول مرة أخرى.'); if(SC.rt!==rt) return;
+  rt.info=info; rt.meta=info.meta; rt.completed=!!info.completed; rt.cert=info.cert_code||null;
+  const t=$('#sc-title'); if(t) t.textContent=info.program.title;
+  if(!rt.meta.path) return fail('لم تُرفع حزمة لهذا الكورس بعد');
+  await ensureZipLib(); const zip=await JSZip.loadAsync(await pkgFetch(rt.meta.path)); if(SC.rt!==rt) return;
+  const b=await buildSrcdoc(zip,rt.meta); rt.urls=b.urls; if(SC.rt!==rt) return;
+  rt.flush=async(data,keep)=>{ if(rt.test){ return; } try{
+    if(keep){ fetch(URL_+'/rest/v1/rpc/scorm_commit',{method:'POST',keepalive:true,headers:{apikey:KEY,Authorization:'Bearer '+LIVE.tok.at,'Content-Type':'application/json'},body:JSON.stringify({p_enrollment:rt.eid,p_data:data})}); return; }
+    const r=await rpc('scorm_commit',{p_enrollment:rt.eid,p_data:data}); if(r&&r.completed&&!rt.completed){ rt.completed=true; rt.cert=r.cert_code; toast('أكملت الكورس'+(r.cert_code?'، وأُضيفت شهادتك.':'.')); refreshMe().catch(()=>{}); }
+    if(r&&r.completed) rt.completed=true; rt.changed(); }catch(e){ rt.log.push({call:'(حفظ على الخادم)',ret:'تعذّر: '+((e&&e.message)||'')}); rt.changed(); } };
+  rt.changed=scUpdateSide; const {api,v12}=makeAPI(rt); if(v12) window.API=api; else window.API_1484_11=api;
+  rt.pagehide=()=>{ try{ rt.finishNow(true); }catch(_){} }; window.addEventListener('pagehide',rt.pagehide);
+  const f=document.createElement('iframe'); f.title=info.program.title; f.setAttribute('allow','fullscreen; autoplay; clipboard-write'); f.srcdoc=b.html; fr.replaceChildren(f); scUpdateSide();
+ }catch(e){ const m=(e&&e.message)||''; fail(m==='launch_missing'?'ملف التشغيل غير موجود داخل الحزمة':m.startsWith('storage_')?'تعذّر تحميل ملف الحزمة':m==='zip_lib'?'تعذّر تحميل أداة فك الضغط':'تعذّر تشغيل الحزمة',`<span class="meta" dir="ltr">${esc(m)}</span>`); }
+}
+function startScorm(o){ stopScorm(); SC.rt={...o,log:[],booted:false}; go('scorm'); }
+RENDER.scorm=async()=>{ const rt=SC.rt; if(!rt){ go(S.role==='lms'?'builder':'courses'); return; }
+ $('#v-scorm').innerHTML=`<div class="pbar2"><button class="back" data-a="sc-exit">${IC.back}${rt.test?'مركز الكورس':'كورساتي'}</button><div class="ctitle"><b id="sc-title">${esc(rt.title||'')}</b><span class="meta">${rt.test?'وضع الاختبار · لا يُسجَّل تقدّم':'كورس تفاعلي (SCORM)'}</span></div></div>
+  <div class="rt"><div class="rt-stage"><div class="sc-frame" id="sc-frame"><p class="empty">جارٍ تحميل الكورس…</p></div></div><aside class="col" id="sc-side"></aside></div>`;
+ scUpdateSide(); if(!rt.booted){ rt.booted=true; await bootScorm(rt); } };
+const _go2=window.go; window.go=function(v){ if(SC.rt&&v!=='scorm') stopScorm(); return _go2(v); };
+const metaOfScorm=s=>({title:s.title,ver:s.ver,tool:s.tool,launch:s.launch,mastery:s.mastery,sco:s.sco,items:s.items||[],files:s.files,size:s.size,name:s.name,path:s.path,uploaded_at:s.uploaded_at,window:s.window||'داخل المنصة',track:s.track||'حسب الحزمة',history:(s.history||[]).map(h=>({name:h.name,size:h.size,uploaded_at:h.uploaded_at||null,path:h.path||null}))});
+const mapScorm=m=>m?{title:m.title,ver:m.ver,tool:m.tool,launch:m.launch,mastery:m.mastery,sco:m.sco||1,items:m.items||[],files:m.files,size:m.size,name:m.name,path:m.path,uploaded_at:m.uploaded_at,uploaded:m.uploaded_at?fdate(m.uploaded_at):'',checks:[],ok:true,window:m.window||'داخل المنصة',track:m.track||'حسب الحزمة',history:(m.history||[]).map(h=>({name:h.name,size:h.size,path:h.path,uploaded_at:h.uploaded_at,uploaded:h.uploaded_at?fdate(h.uploaded_at):''})),blob:null}:null;
+const _applyEd=applyEditorData; applyEditorData=function(p,e){ _applyEd(p,e); p.scorm=mapScorm(e.scorm); if(p.scorm) p.scorm._wt=JSON.stringify([p.scorm.window,p.scorm.track]); };
+const _persist=persist; persist=async function(p,extra){ const r=await _persist(p,extra); if(r&&p.scorm&&p.scorm._wt!==JSON.stringify([p.scorm.window,p.scorm.track])){ await rpc('lms_set_scorm',{p_id:r.id,p_meta:metaOfScorm(p.scorm)}).catch(()=>{}); p.scorm._wt=JSON.stringify([p.scorm.window,p.scorm.track]); } return r; };
 Object.assign(ACT,{
- 'sc-create':async()=>{ const d=$('#scormdlg'); if(d&&d.open) d.close(); toast('فحص الحزمة نجح، لكن استضافة حزم SCORM وتشغيلها للمتعلمين لم تُفعَّل بعد. استخدم «من مستند» أو المحرّر لإنشاء كورس فعلي.'); },
- 'scorm-play':async()=>{ toast('تشغيل حزم SCORM غير مفعّل بعد.'); }
+ 'sc-exit':async()=>{ const t=SC.rt&&SC.rt.test; stopScorm(); go(t?'builder':'courses'); },
+ 'sc-test':async()=>{ const p=progOf(); if(!p||p.isNew||!p.scorm) return; startScorm({test:true,programId:p.id,title:p.t}); },
+ 'scorm-play':async b=>{ const e=LIVE.E.find(x=>x.program_id===b.dataset.id); if(e) openEnrollment(e.id); else toast('سجّل في الكورس أولًا.'); },
+ 'sc-sample':async()=>{ toast('الحزمة النموذجية غير متاحة في النسخة الفعلية. ارفع حزمتك.'); },
+ 'sc-dl':async()=>{ const p=progOf(); if(!p||!p.scorm||!p.scorm.path) return; const buf=await safe(()=>pkgFetch(p.scorm.path)); if(buf) saveFile(p.scorm.name||'package.zip',buf,'application/zip'); },
+ 'sc-create':async()=>{ const r=scResult, file=scBlob; if(!r||!file) return; const foot=$('#sc-foot'); const busyUi=t=>{ foot.innerHTML=`<button class="btn btn-primary" disabled>${t}</button>`; };
+  const meta={title:r.title,ver:r.ver,tool:r.tool,launch:r.launch,mastery:r.mastery,sco:r.sco,items:r.items,files:r.files,size:r.size,name:r.name,uploaded_at:new Date().toISOString(),window:'داخل المنصة',track:'حسب الحزمة',history:[]};
+  try{
+   if(scMode==='new'){ busyUi('جارٍ إنشاء الكورس…'); const id=await rpc('lms_create_scorm',{p_title:r.title,p_school:'prod',p_meta:meta});
+    try{ busyUi('جارٍ رفع الحزمة…'); meta.path=`${id}/${Date.now()}.zip`; await pkgUpload(meta.path,file); await rpc('lms_set_scorm',{p_id:id,p_meta:meta}); }
+    catch(e){ await rpc('delete_program',{p_id:id}).catch(()=>{}); throw e; }
+    $('#scormdlg').close(); LIVE.lmsP=null; await ensureOrg(); if(await openEditor(id,'info')) go('builder'); toast('أُنشئ الكورس من الحزمة كمسودة. راجع المعلومات ثم أرسله للاعتماد.');
+   } else { const p=progOf(); if(!p||p.isNew) return; const old=p.scorm; busyUi('جارٍ رفع الحزمة…'); meta.path=`${p.id}/${Date.now()}.zip`; await pkgUpload(meta.path,file);
+    meta.window=old?old.window:meta.window; meta.track=old?old.track:meta.track; meta.history=[...(old?[{name:old.name,size:old.size,uploaded_at:old.uploaded_at,path:old.path}]:[]),...((old&&old.history)||[])].slice(0,10);
+    await rpc('lms_set_scorm',{p_id:p.id,p_meta:meta}); $('#scormdlg').close(); await openEditor(p.id,'content'); renderEditor(); toast('رُفعت الحزمة الجديدة، وحُفظ تقدّم المتعلمين الحاليين.'); }
+  }catch(e){ const m=(e&&e.message)||''; $('#scormdlg').close(); toast(m==='pkg_too_big'?'حجم الحزمة أكبر من الحد المسموح (50 ميجا).':/forbidden/.test(m)?'ليست لديك صلاحية رفع الحزم.':'تعذّر رفع الحزمة: '+m.slice(0,80)); }
+ }
 });
+
 
 
 /* ---------- UI polish: nav overflow, demo pill, folded rows ---------- */
@@ -3624,7 +3752,7 @@ RENDER.admin=async()=>{ await _adm3(); const panel=[...document.querySelectorAll
  zero.forEach(r=>r.classList.add('zero-hide')); const b=document.createElement('button'); b.className='hbar-more'; b.textContent=`عرض الكليات الأخرى (${zero.length})`; let open=false;
  b.onclick=()=>{ open=!open; zero.forEach(r=>r.classList.toggle('zero-hide',!open)); b.textContent=open?'إخفاء':`عرض الكليات الأخرى (${zero.length})`; }; panel.appendChild(b); };
 
-window.__live=LIVE; LIVE.refreshMe=refreshMe;
+LIVE.openEnrollment=openEnrollment; window.__live=LIVE; LIVE.refreshMe=refreshMe;
 })();
 
 </script>
