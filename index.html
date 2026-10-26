@@ -3396,17 +3396,18 @@ const roleLabel=rs=>(ROLE_ORDER.find(([k])=>rs.includes(k))||[0,'موظف'])[1];
 const _users=RENDER.users;
 RENDER.users=async()=>{ if(!LIVE.on) return _users(); if(!LIVE.usr) load('#v-users'); const u=await safe(()=>rpc('lms_users')); if(!u) return; LIVE.usr=u; drawUsers(); };
 function userState(u){ if(u.status==='disabled') return 'معطّل'; if(u.hr==='left') return 'غادر الشركة'; if(u.is_new) return 'جديد'; return 'نشط'; }
-function drawUsers(){ const U=LIVE.usr, ca=U.can_admin; let list=U.users;
+let uQ='';
+function drawUsers(){ const U=LIVE.usr, ca=U.can_admin, canMgr=ca||isRole('lms_specialist'); let list=U.users; if(uQ.trim()){ const q=uQ.trim().toLowerCase(); list=list.filter(u=>(u.name||'').toLowerCase().includes(q)||(u.email||'').toLowerCase().includes(q)); }
  if(uFilter==='new') list=list.filter(u=>userState(u)==='جديد'); if(uFilter==='left') list=list.filter(u=>['غادر الشركة','معطّل'].includes(userState(u)));
  const f=[['all','الكل'],['new','الجدد'],['left','المغادرون والمعطّلون']];
- $('#v-users').innerHTML=`<section class="hero"><h1>المستخدمون</h1><p>${U.total.toLocaleString('en')} حسابًا في المنصة.${ca?'':' تغيير الأدوار وتعطيل الحسابات من صلاحية مسؤول المنصة.'}</p></section>
- <section class="panel"><div class="toolbar"><div class="chips">${f.map(([k,l])=>`<button data-a="uf" data-f="${k}" aria-pressed="${uFilter===k}">${l}</button>`).join('')}</div><span class="sel">${list.length.toLocaleString('en')} حسابًا</span></div>
-  <div class="tbl-wrap"><table><thead><tr><th>الاسم</th><th>الإدارة</th><th>الدولة</th><th>الدور في المنصة</th><th>الحالة</th><th>آخر دخول</th><th></th></tr></thead><tbody>
+ $('#v-users').innerHTML=`<section class="hero"><h1>المستخدمون</h1><p>${U.total.toLocaleString('en')} حسابًا في المنصة.${ca?'':' تعطيل الحسابات وتغيير أدوار الإدارة من صلاحية مسؤول المنصة.'}${canMgr?' يمكنك إضافة الموظفين وتحديد دورهم (موظف أو مدير) ومديرهم المباشر.':''}</p>${canMgr?'<div style="margin-top:12px"><button class="btn btn-primary" data-a="u-add">إضافة مستخدم</button></div>':''}</section>
+ <section class="panel"><div class="toolbar"><div class="chips">${f.map(([k,l])=>`<button data-a="uf" data-f="${k}" aria-pressed="${uFilter===k}">${l}</button>`).join('')}</div><input id="u-q" type="search" placeholder="ابحث بالاسم أو البريد" value="${esc(uQ)}" style="font:inherit;padding:8px 14px;border:1px solid var(--line);border-radius:999px;min-width:220px"><span class="sel">${list.length.toLocaleString('en')} حسابًا</span></div>
+  <div class="tbl-wrap"><table><thead><tr><th>الاسم</th><th>الإدارة</th><th>المدير المباشر</th><th>الدولة</th><th>الدور في المنصة</th><th>الحالة</th><th>آخر دخول</th><th></th></tr></thead><tbody>
   ${list.slice(0,200).map(u=>{ const st=userState(u), rl=roleLabel(u.roles), pa=u.roles.includes('platform_admin'), can=ca&&u.status==='active'&&!pa;
-   return `<tr><td><div class="who"><span class="av">${esc(u.name[0])}</span><b>${esc(u.name)}</b></div></td><td>${esc(u.dept||'')}</td><td>${esc(CNAME[u.country]||u.country||'')}</td>
-   <td><select class="rolesel" data-a="u-role" data-id="${u.id}" aria-label="دور ${esc(u.name)}" ${can?'':'disabled'}>${(pa?['مسؤول المنصة']:['موظف','مدير','أخصائي LMS','إدارة الجامعة']).map(r=>`<option ${r===rl?'selected':''}>${r}</option>`).join('')}</select></td>
+   return `<tr><td><div class="who"><span class="av">${esc(u.name[0])}</span><b>${esc(u.name)}</b></div></td><td>${esc(u.dept||'')}</td><td>${esc(u.manager||'–')}</td><td>${esc(CNAME[u.country]||u.country||'')}</td>
+   <td>${ca?`<select class="rolesel" data-a="u-role" data-id="${u.id}" aria-label="دور ${esc(u.name)}" ${can?'':'disabled'}>${(pa?['مسؤول المنصة']:['موظف','مدير','أخصائي LMS','إدارة الجامعة']).map(r=>`<option ${r===rl?'selected':''}>${r}</option>`).join('')}</select>`:`<span class="tag ${rl==='مدير'?'enr':'todo'}">${rl}</span>`}</td>
    <td><span class="tag ${st==='نشط'?'done':st==='جديد'?'enr':st==='معطّل'?'todo':'late'}">${st}</span></td><td style="color:var(--muted);white-space:nowrap">${rel2(u.last)}</td>
-   <td>${st==='غادر الشركة'&&ca?`<button class="rowbtn" data-a="deactivate" data-id="${u.id}">عطّل الحساب</button>`:''}</td></tr>`;}).join('')||'<tr><td colspan="7"><p class="m-empty">لا يوجد مستخدمون في هذا التصنيف.</p></td></tr>'}</tbody></table></div></section>`; }
+   <td style="white-space:nowrap">${canMgr&&u.status==='active'&&(ca||!u.roles.some(r=>['platform_admin','executive','lms_specialist'].includes(r)))?`<button class="rowbtn" data-a="u-edit" data-id="${u.id}">تعديل</button> `:''}${st==='غادر الشركة'&&ca?`<button class="rowbtn" data-a="deactivate" data-id="${u.id}">عطّل الحساب</button>`:''}</td></tr>`;}).join('')||'<tr><td colspan="8"><p class="m-empty">لا يوجد مستخدمون في هذا التصنيف.</p></td></tr>'}</tbody></table></div></section>`; }
 const ruleWho=r=>{ const d=r.department?`إدارة ${r.department}`:'', c=r.country?`الموظفون في ${CNAME[r.country]||r.country}`:'';
  if(r.new_hires) return 'كل موظف جديد عند تاريخ مباشرته'+(d?` · ${d}`:''); return d&&c?`${d} · ${CNAME[r.country]||r.country}`:(d||c||'جميع الموظفين'); };
 const _rules=RENDER.rules;
@@ -4264,6 +4265,38 @@ Object.assign(ACT,{
  'as-csv':()=>{ const R=AX.rep; const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"'; const rows=[['الاسم','الإدارة','الحالة','الدرجة','ناجح']].concat(R.learners.map(l=>[l.name,l.dept||'',l.status==='submitted'?'سلّم':l.status==='in_progress'?'لم يسلّم':'لم يبدأ',l.score,l.passed==null?'':(l.passed?'نعم':'لا')])); saveFile('assessment-results.csv','﻿'+rows.map(r=>r.map(q).join(',')).join('\n'),'text/csv;charset=utf-8'); }
 });
 LIVE.AX=AX;
+
+/* ---------- Users: add person / role / manager (LMS) ---------- */
+Object.assign(AR_ERR,{email_exists:'هذا البريد مسجّل بالفعل.',bad_manager:'المدير المختار غير موجود أو حسابه غير نشط.',manager_cycle:'لا يمكن اختيار هذا المدير لأنه يتبع هذا الموظف في الهيكل.',protected_user:'هذا الحساب بصلاحيات إدارية، وتعديله من صلاحية مسؤول المنصة.',bad_role:'الدور غير صالح.',bad_input:'راجع الاسم والبريد الإلكتروني والإدارة.'});
+(()=>{ const d=document.createElement('dialog'); d.id='udlg'; d.setAttribute('aria-labelledby','ud-t'); d.innerHTML='<div class="dlg-h"><h2 id="ud-t"></h2></div><div class="dlg-b as-form" id="ud-b"></div><div class="dlg-f" id="ud-f"></div>'; document.body.appendChild(d); })();
+const UD={mode:null,id:null,map:new Map()};
+const mgrLabel=u=>`${u.name}${u.dept?' — '+u.dept:''}`;
+function udForm(u){ const U=LIVE.usr; const cands=U.users.filter(x=>x.status==='active'&&(!u||x.id!==u.id)); UD.map=new Map(cands.map(x=>[mgrLabel(x),x.id]));
+ const cur=u&&u.manager_id?U.users.find(x=>x.id===u.manager_id):null; const isMgr=u?u.roles.includes('manager'):false;
+ $('#ud-t').textContent=u?'تعديل مستخدم':'إضافة مستخدم';
+ $('#ud-b').innerHTML=`<label>الاسم الكامل<input id="ud-name" value="${esc(u?u.name:'')}" ${u?'disabled':''} maxlength="120"></label>
+ <label>البريد الإلكتروني<input id="ud-email" type="email" dir="ltr" value="${esc(u?u.email||'':'')}" ${u?'disabled':''} placeholder="name@tamara.co"></label>
+ <label>المسمى الوظيفي<input id="ud-title" value="${esc(u?u.title||'':'')}" maxlength="120"></label>
+ <div class="as-row"><label>الإدارة<select id="ud-dept"><option value="">بدون</option>${U.depts.map(x=>`<option value="${x.id}" ${u&&u.dept_id===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
+ <label>الدور<select id="ud-role"><option value="employee" ${isMgr?'':'selected'}>موظف</option><option value="manager" ${isMgr?'selected':''}>مدير (يرى فريقه ويعيّن له)</option></select></label></div>
+ <label>المدير المباشر<input id="ud-mgr" list="ud-mgrs" value="${esc(cur?mgrLabel(cur):'')}" placeholder="ابدأ بكتابة اسم المدير واختره من القائمة"><datalist id="ud-mgrs">${cands.slice(0,1500).map(x=>`<option value="${esc(mgrLabel(x))}"></option>`).join('')}</datalist></label>
+ <p class="meta" id="ud-msg" style="margin:0"></p>`;
+ $('#ud-f').innerHTML=`<button class="btn btn-primary" data-a="u-save">${u?'احفظ':'أضف المستخدم'}</button><button class="btn btn-ghost" data-a="u-cancel">إلغاء</button>`; }
+Object.assign(ACT,{
+ 'u-add':()=>{ UD.mode='add'; UD.id=null; udForm(null); $('#udlg').showModal(); },
+ 'u-edit':b=>{ const u=LIVE.usr.users.find(x=>x.id===b.dataset.id); if(!u) return; UD.mode='edit'; UD.id=u.id; udForm(u); $('#udlg').showModal(); },
+ 'u-cancel':()=>$('#udlg').close(),
+ 'u-done':async()=>{ $('#udlg').close(); LIVE.usr=null; await RENDER.users(); },
+ 'u-copy':async b=>{ try{ await navigator.clipboard.writeText(b.dataset.t); toast('نُسخت كلمة المرور المؤقتة.'); }catch(_){ toast('انسخها يدويًا من الشاشة.'); } },
+ 'u-save':async b=>{ const mtxt=$('#ud-mgr').value.trim(); let mid=null; if(mtxt){ mid=UD.map.get(mtxt)||null; if(!mid){ $('#ud-msg').textContent='اختر المدير من القائمة المقترحة.'; return; } }
+   const title=$('#ud-title').value.trim(), dept=$('#ud-dept').value||null, role=$('#ud-role').value; b.disabled=true;
+   if(UD.mode==='add'){ const name=$('#ud-name').value.trim(), email=$('#ud-email').value.trim(); if(!name||!/^[^@\s]+@[^@\s]+$/.test(email)){ $('#ud-msg').textContent='اكتب الاسم وبريدًا إلكترونيًا صحيحًا.'; b.disabled=false; return; }
+    const r=await safe(()=>rpc('lms_create_user',{p_name:name,p_email:email,p_title:title,p_department:dept,p_manager:mid,p_role:role})); if(!r){ b.disabled=false; return; }
+    $('#ud-t').textContent='تمت الإضافة'; $('#ud-b').innerHTML=`<p>أُنشئ حساب <b>${esc(name)}</b>${r.auto_assigned?` وعُيّن له ${r.auto_assigned} من البرامج تلقائيًا`:''}. شارك بيانات الدخول معه بطريقة آمنة، وهذه المرة الوحيدة التي تظهر فيها كلمة المرور.</p><label>البريد<input readonly dir="ltr" value="${esc(r.email)}"></label><label>كلمة المرور المؤقتة<input readonly dir="ltr" id="ud-pw" value="${esc(r.temp_password)}"></label>`;
+    $('#ud-f').innerHTML=`<button class="btn btn-primary" data-a="u-copy" data-t="${esc(r.temp_password)}">انسخ كلمة المرور</button><button class="btn btn-ghost" data-a="u-done">تم</button>`; LIVE.usr=null; return; }
+   const ok=await rpcOk('lms_update_user',{p_user:UD.id,p_title:title,p_department:dept,p_manager:mid,p_role:role}); b.disabled=false; if(!ok) return; $('#udlg').close(); LIVE.usr=null; await RENDER.users(); toast('حُفظت بيانات المستخدم.'); }
+});
+document.addEventListener('input',e=>{ if(e.target&&e.target.id==='u-q'){ uQ=e.target.value; const pos=e.target.selectionStart; drawUsers(); const i=$('#u-q'); if(i){ i.focus(); try{ i.setSelectionRange(pos,pos); }catch(_){} } } });
 
 LIVE.openEnrollment=openEnrollment; window.__live=LIVE; LIVE.refreshMe=refreshMe;
 })();
