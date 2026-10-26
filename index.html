@@ -3696,8 +3696,9 @@ async function bootScorm(rt){ const fr=$('#sc-frame'); const fail=(t,d)=>{ if(fr
  }catch(e){ const m=(e&&e.message)||''; fail(m==='launch_missing'?'ملف التشغيل غير موجود داخل الحزمة':m.startsWith('storage_')?'تعذّر تحميل ملف الحزمة':m==='zip_lib'?'تعذّر تحميل أداة فك الضغط':'تعذّر تشغيل الحزمة',`<span class="meta" dir="ltr">${esc(m)}</span>`); }
 }
 function startScorm(o){ stopScorm(); SC.rt={...o,log:[],booted:false}; go('scorm'); }
+if(!document.getElementById('sc-css')){ const st=document.createElement('style'); st.id='sc-css'; st.textContent='.sc-frame{height:calc(100vh - 190px);min-height:640px;background:#fff;display:grid}.sc-frame iframe{width:100%;height:100%;border:0;display:block}.sc-frame>.empty{align-self:center;text-align:center}#v-scorm .rt{grid-template-columns:minmax(0,1fr) 280px}@media(max-width:1100px){#v-scorm .rt{grid-template-columns:1fr}.sc-frame{height:calc(100vh - 150px);min-height:560px}}'; document.head.appendChild(st); }
 RENDER.scorm=async()=>{ const rt=SC.rt; if(!rt){ go(S.role==='lms'?'builder':'courses'); return; }
- $('#v-scorm').innerHTML=`<div class="pbar2"><button class="back" data-a="sc-exit">${IC.back}${rt.test?'مركز الكورس':'كورساتي'}</button><div class="ctitle"><b id="sc-title">${esc(rt.title||'')}</b><span class="meta">${rt.test?'وضع الاختبار · لا يُسجَّل تقدّم':'كورس تفاعلي (SCORM)'}</span></div></div>
+ $('#v-scorm').innerHTML=`<div class="pbar2"><button class="back" data-a="sc-exit">${IC.back}${rt.test?'مركز الكورس':'كورساتي'}</button><button class="btn btn-ghost btn-sm" data-a="sc-full" style="margin-inline-start:auto">ملء الشاشة</button><div class="ctitle"><b id="sc-title">${esc(rt.title||'')}</b><span class="meta">${rt.test?'وضع الاختبار · لا يُسجَّل تقدّم':'كورس تفاعلي (SCORM)'}</span></div></div>
   <div class="rt"><div class="rt-stage"><div class="sc-frame" id="sc-frame"><p class="empty">جارٍ تحميل الكورس…</p></div></div><aside class="col" id="sc-side"></aside></div>`;
  scUpdateSide(); if(!rt.booted){ rt.booted=true; await bootScorm(rt); } };
 const _go2=window.go; window.go=function(v){ if(SC.rt&&v!=='scorm') stopScorm(); return _go2(v); };
@@ -3706,6 +3707,7 @@ const mapScorm=m=>m?{title:m.title,ver:m.ver,tool:m.tool,launch:m.launch,mastery
 const _applyEd=applyEditorData; applyEditorData=function(p,e){ _applyEd(p,e); p.scorm=mapScorm(e.scorm); if(p.scorm) p.scorm._wt=JSON.stringify([p.scorm.window,p.scorm.track]); };
 const _persist=persist; persist=async function(p,extra){ const r=await _persist(p,extra); if(r&&p.scorm&&p.scorm._wt!==JSON.stringify([p.scorm.window,p.scorm.track])){ await rpc('lms_set_scorm',{p_id:r.id,p_meta:metaOfScorm(p.scorm)}).catch(()=>{}); p.scorm._wt=JSON.stringify([p.scorm.window,p.scorm.track]); } return r; };
 Object.assign(ACT,{
+ 'sc-full':async()=>{ const f=$('#sc-frame'); if(f&&f.requestFullscreen) f.requestFullscreen().catch(()=>toast('المتصفح منع ملء الشاشة.')); },
  'sc-exit':async()=>{ const t=SC.rt&&SC.rt.test; stopScorm(); go(t?'builder':'courses'); },
  'sc-test':async()=>{ const p=progOf(); if(!p||p.isNew||!p.scorm) return; startScorm({test:true,programId:p.id,title:p.t}); },
  'scorm-play':async b=>{ const e=LIVE.E.find(x=>x.program_id===b.dataset.id); if(e) openEnrollment(e.id); else toast('سجّل في الكورس أولًا.'); },
