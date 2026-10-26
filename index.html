@@ -3735,7 +3735,7 @@ Object.assign(ACT,{
  function organizeNav(){ obs.disconnect(); try{
    nav.querySelectorAll('.nav-more').forEach(m=>{ [...m.querySelectorAll('.nav-pop>button')].forEach(b=>nav.insertBefore(b,m)); m.remove(); });
    const btns=[...nav.querySelectorAll(':scope>button[data-go]')]; const w=window.innerWidth;
-   const max=w<=700?99:(w<1100?3:(w<1280?4:5));
+   const max=w<=700?99:(w<1100?3:(w<1280?4:7));
    if(btns.length>max+1){ const cur=btns.find(b=>b.getAttribute('aria-current')==='page'); const keep=btns.slice(0,max); const inKeep=cur?keep.includes(cur):true; if(!inKeep) keep[max-1]=cur;
     const rest=btns.filter(b=>!keep.includes(b)); const wrap=document.createElement('div'); wrap.className='nav-more';
     wrap.innerHTML=`<button class="more-btn" data-a="nav-more" aria-haspopup="true" aria-expanded="false" ${rest.includes(cur)?'aria-current="page"':''}>المزيد ▾</button><div class="nav-pop"></div>`;
@@ -4163,6 +4163,107 @@ document.addEventListener('dragend',()=>{ if(dragLi) dragLi.classList.remove('dr
 document.addEventListener('drop',e=>{ if(dragLi) e.preventDefault(); });
 (()=>{ const st=document.createElement('style'); st.textContent=`.rb-msi{display:flex;gap:10px;padding:8px 0;align-items:flex-start}.rb-sa{font:inherit;padding:9px 12px;border-radius:10px;border:1px solid var(--line,#cfcde6);min-width:240px}.rb-en{text-align:left}.rb-ord li[draggable]{cursor:grab}.rb-ord li.drag{opacity:.45}
 .rb-cmb{border:1px solid var(--line,#cfcde6);background:#fff;border-radius:999px;padding:3px 12px;font:inherit;font-size:13px;cursor:pointer}.rb-cm{background:var(--surface-2,#f6f5ff);border-radius:14px;padding:12px 14px;margin-bottom:10px}.rb-cm textarea{width:100%;font:inherit;padding:8px;border-radius:10px;border:1px solid var(--line,#cfcde6);margin:8px 0}.rb-cmi{border-bottom:1px solid var(--line,#e3e1f1);padding:6px 0}.rb-cmi.done{opacity:.55}.rb-cmi p{margin:2px 0 6px}`; document.head.appendChild(st); })();
+
+/* ---------- Monthly assessments (الامتحانات) ---------- */
+Object.assign(AR_ERR,{not_open:'الامتحان لم يُفتح بعد.',closed:'انتهت نافذة هذا الامتحان.',already_submitted:'سلّمت هذا الامتحان من قبل، والمحاولة واحدة فقط.',not_started:'لم تبدأ هذا الامتحان بعد.',locked:'لا يمكن تعديل الأسئلة بعد أن بدأ موظفون الامتحان. عدّل الموعد أو الوصف فقط.',has_attempts:'لا يمكن حذف الامتحان أو إيقاف نشره بعد أن بدأه موظفون.',no_questions:'أضف سؤالًا واحدًا على الأقل قبل النشر.',bad_question:'كل سؤال يحتاج نصًا وخيارين على الأقل وإجابة صحيحة.',bad_title:'اكتب عنوان الامتحان.'});
+(()=>{ const st=document.createElement('style'); st.id='as-css'; st.textContent=`
+.as-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.as-card{background:var(--surface);border-radius:20px;padding:20px;box-shadow:var(--shadow-sm,0 1px 6px rgba(0,0,0,.06));display:grid;gap:10px;align-content:start}
+.as-card h3{margin:0}.as-card .meta{color:var(--muted);font-size:14px}
+.as-open{outline:2px solid var(--primary)}
+.as-timer{position:sticky;top:8px;z-index:5;display:flex;justify-content:space-between;align-items:center;background:var(--surface);border-radius:16px;padding:12px 18px;box-shadow:var(--shadow-lg,0 4px 18px rgba(0,0,0,.12));margin-bottom:16px}
+.as-timer b{font-size:22px;font-variant-numeric:tabular-nums}.as-timer.low b{color:#c0392b}
+.as-q{background:var(--surface);border-radius:18px;padding:18px 20px;margin-bottom:14px}
+.as-q label{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border:1px solid var(--line);border-radius:12px;margin-top:8px;cursor:pointer}
+.as-q label:has(input:checked){border-color:var(--primary);background:var(--primary-softer)}
+.as-form{display:grid;gap:12px;max-width:760px}.as-form label{display:grid;gap:4px;font-weight:600}.as-form input,.as-form textarea,.as-form select{font:inherit;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;font-weight:400}
+.as-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.as-eq{background:var(--surface);border-radius:16px;padding:14px 16px;display:grid;gap:8px}
+.as-opt{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center}
+@media (max-width:700px){.as-row{grid-template-columns:1fr}}`; document.head.appendChild(st); })();
+const asSec=document.createElement('section'); asSec.className='view'; asSec.id='v-assess'; asSec.hidden=true; document.querySelector('#v-skills').after(asSec);
+['emp','mgr','adm'].forEach(k=>{ const n=ROLES[k].nav; if(!n.some(x=>x[0]==='assess')) n.splice(k==='emp'?4:n.length-1,0,['assess','الامتحانات']); });
+if(!ROLES.lms.nav.some(x=>x[0]==='assess')) ROLES.lms.nav.splice(2,0,['assess','الامتحانات']);
+const AX={mode:'list',list:null,rep:null,form:null,exam:null,tm:null};
+const dt=(iso)=>iso?new Date(iso).toLocaleString('ar-SA-u-ca-gregory-nu-latn',{day:'numeric',month:'long',hour:'numeric',minute:'2-digit'}):'';
+const toLocalInput=iso=>{ const d=new Date(iso); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+const isLmsRole=()=>S.role==='lms';
+const STATE_TAG={open:['مفتوح','background:#e8f7ee;color:#1b6b46'],upcoming:['قادم','background:#eef0ff;color:#3b3fa0'],closed:['مغلق','background:#f1f1f1;color:#666']};
+const stTag=s=>`<span class="tag" style="${STATE_TAG[s][1]}">${STATE_TAG[s][0]}</span>`;
+function asStop(){ if(AX.tm){ clearInterval(AX.tm); AX.tm=null; } }
+async function asLoad(){ if(isLmsRole()){ const r=await safe(()=>rpc('assess_admin_list')); if(!r) return false; AX.list=r; } else { const r=await safe(()=>rpc('assess_list')); if(!r) return false; AX.list=r; } return true; }
+RENDER.assess=async()=>{ asStop(); if(!LIVE.on){ $('#v-assess').innerHTML='<div class="hero"><h1>الامتحانات</h1><p>تتوفر هذه الميزة في النسخة المتصلة بقاعدة البيانات.</p></div>'; return; }
+ if(AX.mode==='exam'&&AX.exam&&!isLmsRole()) return drawAssess();
+ AX.mode='list'; load('#v-assess'); if(!(await asLoad())) return; drawAssess(); };
+function drawAssess(){ const el=$('#v-assess'); asStop();
+ if(isLmsRole()){ if(AX.mode==='edit') return drawForm(); if(AX.mode==='report') return drawReport(); return drawAdmin(); }
+ if(AX.mode==='exam') return drawExam(); drawLearner(); }
+/* ----- learner ----- */
+function drawLearner(){ const L=AX.list||[]; const open=L.filter(a=>a.state==='open'&&(!a.attempt||a.attempt.status==='in_progress')); const done=L.filter(a=>a.attempt&&a.attempt.status==='submitted');
+ const card=a=>{ const t=a.attempt; let foot=''; 
+  if(t&&t.status==='submitted') foot=`<div><span class="tag" style="${t.passed?'background:#e8f7ee;color:#1b6b46':'background:#fff4e0;color:#8a5a00'}">${t.passed?'ناجح':'لم تتجاوز درجة النجاح'}</span> <b style="font-size:22px">${t.score}%</b></div>${t.cert_code?`<button class="btn btn-ghost btn-sm" data-a="as-cert" data-code="${esc(t.cert_code)}" data-t="${esc(a.title)}">عرض الشهادة</button>`:''}`;
+  else if(a.state==='open') foot=t?`<button class="btn btn-primary" data-a="as-start" data-id="${a.id}" data-go2="1">أكمل الامتحان</button>`:`<button class="btn btn-primary" data-a="as-start" data-id="${a.id}">ابدأ الامتحان</button>`;
+  else if(a.state==='upcoming') foot=`<span class="meta">يفتح ${dt(a.opens_at)}</span>`; else foot='<span class="meta">فاتتك نافذة هذا الامتحان.</span>';
+  return `<div class="as-card ${a.state==='open'&&!(t&&t.status==='submitted')?'as-open':''}"><div style="display:flex;justify-content:space-between;gap:8px"><h3>${esc(a.title)}</h3>${stTag(a.state)}</div>${a.description?`<p class="meta">${esc(a.description)}</p>`:''}<p class="meta">${a.n} سؤالًا · ${a.duration_min} دقيقة · محاولة واحدة · النجاح من ${a.pass_mark}%<br>من ${dt(a.opens_at)} إلى ${dt(a.closes_at)}</p>${foot}</div>`; };
+ $('#v-assess').innerHTML=`<div class="hero"><h1>الامتحانات الشهرية</h1><p>${open.length?`لديك ${open.length===1?'امتحان مفتوح':open.length+' امتحانات مفتوحة'} الآن.`:'لا يوجد امتحان مفتوح الآن.'} لكل امتحان وقت محدد ومحاولة واحدة، فجهّز نفسك قبل أن تبدأ.</p></div>
+ <div class="as-grid">${L.length?L.map(card).join(''):'<div class="panel"><p class="empty">لم يُنشر أي امتحان بعد.</p></div>'}</div>`; }
+function examTick(){ const x=AX.exam; if(!x) return asStop(); const ms=x.deadline-Date.now(); const t=$('#as-t'); if(!t) return asStop(); const s=Math.max(0,Math.ceil(ms/1000)); t.textContent=`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; $('#as-timer').classList.toggle('low',s<=60); if(ms<=0){ asStop(); toast('انتهى الوقت. يُسلَّم الامتحان الآن.'); doSubmit(true); } }
+function drawExam(){ const x=AX.exam; $('#v-assess').innerHTML=`<div class="as-timer" id="as-timer"><div><b id="as-t">--:--</b> <span class="meta">الوقت المتبقي</span></div><button class="btn btn-primary" data-a="as-submit">سلّم الامتحان</button></div><div class="hero" style="margin-top:0"><h1>${esc(x.title)}</h1><p>أجب عن كل الأسئلة ثم سلّم. لا يمكن إعادة المحاولة.</p></div>
+ ${x.questions.map((q,i)=>`<div class="as-q"><p><b>${i+1}. ${esc(q.q)}</b></p>${q.a.map((o,k)=>`<label><input type="radio" name="asq${i}" value="${k}" ${x.ans[i]===k?'checked':''}><span>${esc(o)}</span></label>`).join('')}</div>`).join('')}
+ <div style="margin:8px 0 40px"><button class="btn btn-primary" data-a="as-submit">سلّم الامتحان</button></div>`;
+ examTick(); AX.tm=setInterval(examTick,500); }
+document.addEventListener('change',e=>{ const r=e.target; if(r&&r.matches&&r.matches('#v-assess .as-q input[type=radio]')&&AX.exam){ AX.exam.ans[+r.name.slice(3)]=+r.value; } });
+async function doSubmit(auto){ const x=AX.exam; if(!x||x.busy) return; const un=x.questions.map((_,i)=>x.ans[i]).filter(v=>v===undefined).length; if(!auto&&un&&!x.warned){ x.warned=true; toast(`باقي ${un} سؤالًا بلا إجابة. اضغط تسليم مرة أخرى للتأكيد.`); return; }
+ x.busy=true; asStop(); const ans=x.questions.map((_,i)=>x.ans[i]===undefined?-1:x.ans[i]); const r=await safe(()=>rpc('assess_submit',{p_id:x.id,p_answers:ans})); x.busy=false; if(!r){ AX.exam=null; AX.mode='list'; return RENDER.assess(); }
+ AX.exam=null; AX.mode='list'; await asLoad(); drawAssess(); toast(r.passed?`نجحت بدرجة ${r.score}%.`:`درجتك ${r.score}%. لم تتجاوز درجة النجاح.`); }
+/* ----- LMS: list / form / report ----- */
+function drawAdmin(){ const L=AX.list||[]; const closed=L.filter(a=>a.avg!=null).slice().reverse();
+ $('#v-assess').innerHTML=`<div class="hero"><h1>الامتحانات</h1><p>امتحانات شهرية بنافذة زمنية ومؤقت ومحاولة واحدة، بتصحيح على الخادم وشهادة عند النجاح.</p><div style="margin-top:12px"><button class="btn btn-primary" data-a="as-new">امتحان جديد</button></div></div>
+ ${closed.length>1?`<section class="panel" style="margin-bottom:18px"><h2>اتجاه متوسط الدرجات</h2>${closed.map(a=>`<div class="hbar"><span>${esc(a.title)}</span><div class="b"><i style="width:${a.avg}%"></i></div><b>${a.avg}%</b></div>`).join('')}</section>`:''}
+ <section class="panel"><div class="tbl-wrap"><table><thead><tr><th>الامتحان</th><th>الحالة</th><th>النافذة</th><th>سلّموا</th><th>المتوسط</th><th>النجاح</th><th></th></tr></thead><tbody>${L.length?L.map(a=>`<tr><td><b>${esc(a.title)}</b><br><span class="meta">${a.n} سؤالًا · ${a.duration_min} د · نجاح ${a.pass_mark}%</span></td><td>${a.status==='draft'?'<span class="tag" style="background:#f1f1f1;color:#666">مسودة</span>':stTag(a.state)}</td><td class="meta">${dt(a.opens_at)}<br>${dt(a.closes_at)}</td><td>${a.submitted} / ${a.eligible}</td><td>${a.avg==null?'–':a.avg+'%'}</td><td>${a.pass_rate==null?'–':a.pass_rate+'%'}</td><td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" data-a="as-rep" data-id="${a.id}">التقرير</button> <button class="btn btn-ghost btn-sm" data-a="as-edit" data-id="${a.id}">تعديل</button> <button class="btn btn-ghost btn-sm" data-a="as-pub" data-id="${a.id}" data-s="${a.status==='published'?'draft':'published'}">${a.status==='published'?'إلغاء النشر':'نشر'}</button> ${a.started?'':`<button class="btn btn-ghost btn-sm" data-a="as-del" data-id="${a.id}">حذف</button>`}</td></tr>`).join(''):'<tr><td colspan="7"><p class="empty">لا توجد امتحانات بعد. ابدأ بامتحان هذا الشهر.</p></td></tr>'}</tbody></table></div></section>`; }
+const blankQ=()=>({q:'',a:['',''],c:0});
+function newForm(){ const d=new Date(); const s=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1,9,0), e=new Date(d.getFullYear(),d.getMonth(),d.getDate()+4,23,59); return {id:null,title:'',description:'',opens:toLocalInput(s),closes:toLocalInput(e),dur:30,pass:80,cert:true,questions:[blankQ()],attempts:0}; }
+function drawForm(){ const f=AX.form; $('#v-assess').innerHTML=`<div class="pbar2"><button class="back" data-a="as-back">${IC.back}الامتحانات</button><div><button class="btn btn-ghost btn-sm" data-a="as-save" data-pub="0">حفظ كمسودة</button> <button class="btn btn-primary btn-sm" data-a="as-save" data-pub="1">حفظ ونشر</button></div></div>
+ <div class="hero"><h1>${f.id?'تعديل الامتحان':'امتحان جديد'}</h1>${f.attempts?'<p>بدأ موظفون هذا الامتحان، فلا يمكن تعديل الأسئلة. يمكنك تعديل الموعد والوصف.</p>':''}</div>
+ <div class="as-form"><label>العنوان<input data-af="title" value="${esc(f.title)}" maxlength="160" placeholder="مثال: امتحان أكتوبر — الامتثال"></label><label>وصف قصير<textarea data-af="description" rows="2" maxlength="600">${esc(f.description)}</textarea></label>
+ <div class="as-row"><label>يفتح<input type="datetime-local" data-af="opens" value="${f.opens}"></label><label>يغلق<input type="datetime-local" data-af="closes" value="${f.closes}"></label></div>
+ <div class="as-row"><label>المدة بالدقائق<input type="number" min="1" max="240" data-af="dur" value="${f.dur}"></label><label>درجة النجاح %<input type="number" min="1" max="100" data-af="pass" value="${f.pass}"></label></div>
+ <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" data-af="cert" ${f.cert?'checked':''}> تُصدَر شهادة لمن ينجح</label>
+ <h2 style="margin:12px 0 0">الأسئلة (${f.questions.length})</h2>
+ ${f.questions.map((q,i)=>`<div class="as-eq"><label>السؤال ${i+1}<textarea data-aq="${i}" data-k="q" rows="2" ${f.attempts?'disabled':''}>${esc(q.q)}</textarea></label>${q.a.map((o,k)=>`<div class="as-opt"><input type="radio" name="asc${i}" ${q.c===k?'checked':''} data-aq="${i}" data-k="c" value="${k}" title="الإجابة الصحيحة" ${f.attempts?'disabled':''}><input data-aq="${i}" data-k="o" data-ok="${k}" value="${esc(o)}" placeholder="الخيار ${k+1}" ${f.attempts?'disabled':''} style="font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:10px">${q.a.length>2&&!f.attempts?`<button class="btn btn-ghost btn-sm" data-a="as-delopt" data-i="${i}" data-k="${k}">✕</button>`:'<span></span>'}</div>`).join('')}${f.attempts?'':`<div><button class="btn btn-ghost btn-sm" data-a="as-addopt" data-i="${i}" ${q.a.length>=6?'disabled':''}>+ خيار</button> <button class="btn btn-ghost btn-sm" data-a="as-delq" data-i="${i}" ${f.questions.length<2?'disabled':''}>حذف السؤال</button></div>`}</div>`).join('')}
+ ${f.attempts?'':'<div><button class="btn btn-ghost" data-a="as-addq">+ أضف سؤالًا</button></div>'}</div>`; }
+document.addEventListener('input',e=>{ const t=e.target; if(!AX.form||!t.dataset) return; const f=AX.form; if(t.dataset.af){ f[t.dataset.af]=t.type==='checkbox'?t.checked:(t.type==='number'?+t.value:t.value); } else if(t.dataset.aq!==undefined){ const q=f.questions[+t.dataset.aq]; if(!q) return; if(t.dataset.k==='q') q.q=t.value; else if(t.dataset.k==='o') q.a[+t.dataset.ok]=t.value; else if(t.dataset.k==='c'&&t.checked) q.c=+t.value; } });
+async function drawReportLoad(id){ load('#v-assess'); const r=await safe(()=>rpc('assess_report',{p_id:id})); if(!r){ AX.mode='list'; return RENDER.assess(); } AX.rep=r; AX.mode='report'; drawReport(); }
+function drawReport(){ const R=AX.rep, part=R.eligible?Math.round(100*R.submitted/R.eligible):0, pr=R.submitted?Math.round(100*R.passed/R.submitted):0; const qs=R.questions.slice().sort((a,b)=>(a.pct??101)-(b.pct??101));
+ $('#v-assess').innerHTML=`<div class="pbar2"><button class="back" data-a="as-back">${IC.back}الامتحانات</button><button class="btn btn-ghost btn-sm" data-a="as-csv">تنزيل النتائج CSV</button></div><div class="hero"><h1>${esc(R.title)}</h1><p>نتائج الامتحان حسب الإدارة والسؤال والموظف.</p></div>
+ <div class="kpis"><div class="kpi"><b>${part}%</b><span>المشاركة</span><small>${R.submitted} من ${R.eligible}</small></div><div class="kpi"><b>${R.avg==null?'–':R.avg+'%'}</b><span>متوسط الدرجات</span></div><div class="kpi"><b>${R.submitted?pr+'%':'–'}</b><span>نسبة النجاح</span><small>من ${R.pass_mark}%</small></div><div class="kpi"><b>${R.n}</b><span>سؤالًا</span></div></div>
+ <div class="grid"><div class="col"><section class="panel"><h2>الإدارات</h2>${R.depts.map(d=>`<div class="hbar"><span>${esc(d.n)}<small>${d.submitted} من ${d.total} · نجح ${d.passed}</small></span><div class="b"><i style="width:${d.avg||0}%"></i></div><b>${d.avg==null?'–':d.avg+'%'}</b></div>`).join('')}</section>
+ <section class="panel" style="margin-top:18px"><h2>الموظفون</h2><div class="tbl-wrap"><table><thead><tr><th>الاسم</th><th>الإدارة</th><th>الحالة</th><th>الدرجة</th></tr></thead><tbody>${R.learners.map(l=>`<tr><td>${esc(l.name)}</td><td class="meta">${esc(l.dept||'')}</td><td>${l.status==='submitted'?(l.passed?'ناجح':'لم ينجح'):l.status==='in_progress'?'لم يسلّم':'لم يبدأ'}</td><td>${l.score==null?'–':l.score+'%'}</td></tr>`).join('')}</tbody></table></div></section></div>
+ <aside class="col"><section class="panel"><h2>صعوبة الأسئلة</h2><p class="sub">الأقل إجابة صحيحة أولًا.</p>${qs.map(q=>`<div class="hbar" style="grid-template-columns:1fr 70px 44px"><span>${esc(q.q)}</span><div class="b"><i style="width:${q.pct||0}%"></i></div><b>${q.pct==null?'–':q.pct+'%'}</b></div>`).join('')}</section></aside></div>`; }
+Object.assign(ACT,{
+ 'as-start':async b=>{ if(!b.dataset.go2&&!b.dataset.sure){ b.dataset.sure='1'; b.textContent='تأكيد: يبدأ المؤقت فورًا'; setTimeout(()=>{ if(b.isConnected&&b.dataset.sure){ delete b.dataset.sure; b.textContent='ابدأ الامتحان'; } },6000); return; }
+   const r=await safe(()=>rpc('assess_start',{p_id:b.dataset.id})); if(!r) return; AX.exam={id:b.dataset.id,title:r.title,questions:r.questions,deadline:new Date(r.deadline).getTime(),ans:[]}; AX.mode='exam'; drawAssess(); window.scrollTo({top:0}); },
+ 'as-submit':()=>doSubmit(false),
+ 'as-cert':b=>{ const me=S.me; S.certs=S.certs||[]; if(!S.certs.some(c=>c.code===b.dataset.code)) S.certs.push({code:b.dataset.code,name:me.name,title:b.dataset.t,date:fdate(new Date(),true),school:'جامعة تمارا',m:isMale(me.name),kind:'امتحان'}); openCert(b.dataset.code); },
+ 'as-new':()=>{ AX.form=newForm(); AX.mode='edit'; drawAssess(); },
+ 'as-back':async()=>{ AX.mode='list'; await RENDER.assess(); },
+ 'as-addq':()=>{ AX.form.questions.push(blankQ()); drawForm(); },
+ 'as-delq':b=>{ AX.form.questions.splice(+b.dataset.i,1); drawForm(); },
+ 'as-addopt':b=>{ const q=AX.form.questions[+b.dataset.i]; if(q.a.length<6) q.a.push(''); drawForm(); },
+ 'as-delopt':b=>{ const q=AX.form.questions[+b.dataset.i], k=+b.dataset.k; q.a.splice(k,1); if(q.c===k) q.c=0; else if(q.c>k) q.c--; drawForm(); },
+ 'as-edit':async b=>{ const r=await safe(()=>rpc('assess_get',{p_id:b.dataset.id})); if(!r) return; AX.form={id:r.id,title:r.title,description:r.description||'',opens:toLocalInput(r.opens_at),closes:toLocalInput(r.closes_at),dur:r.duration_min,pass:r.pass_mark,cert:r.cert,questions:r.questions.length?r.questions:[blankQ()],attempts:r.attempts}; AX.mode='edit'; drawAssess(); },
+ 'as-save':async b=>{ const f=AX.form; if(!f.title.trim()){ toast('اكتب عنوان الامتحان.'); return; } if(new Date(f.closes)<=new Date(f.opens)){ toast('موعد الإغلاق لازم يكون بعد موعد الفتح.'); return; }
+   for(const q of f.questions){ if(!q.q.trim()||q.a.filter(x=>x.trim()).length<2||!String(q.a[q.c]||'').trim()){ toast('كل سؤال يحتاج نصًا وخيارين على الأقل وإجابة صحيحة غير فارغة.'); return; } }
+   const qs=f.questions.map(q=>{ const keep=q.a.map((x,k)=>({x:x.trim(),k})).filter(o=>o.x); return {q:q.q.trim(),a:keep.map(o=>o.x),c:keep.findIndex(o=>o.k===q.c)}; });
+   const payload={title:f.title.trim(),description:f.description.trim(),opens_at:new Date(f.opens).toISOString(),closes_at:new Date(f.closes).toISOString(),duration_min:+f.dur||30,pass_mark:+f.pass||80,cert:!!f.cert,questions:qs};
+   b.disabled=true; const id=await safe(()=>rpc('assess_save',{p_id:f.id,p:payload})); if(!id){ b.disabled=false; return; }
+   if(b.dataset.pub==='1'){ const ok=await rpcOk('assess_set_status',{p_id:id,p_status:'published'}); if(!ok){ f.id=id; b.disabled=false; return; } }
+   AX.mode='list'; await RENDER.assess(); toast(b.dataset.pub==='1'?'نُشر الامتحان وأُرسل إشعار للموظفين.':'حُفظ الامتحان كمسودة.'); },
+ 'as-pub':async b=>{ const ok=await rpcOk('assess_set_status',{p_id:b.dataset.id,p_status:b.dataset.s}); if(!ok) return; await RENDER.assess(); toast(b.dataset.s==='published'?'نُشر الامتحان وأُرسل إشعار للموظفين.':'أُلغي النشر.'); },
+ 'as-del':async b=>{ if(!b.dataset.sure){ b.dataset.sure='1'; b.textContent='تأكيد الحذف'; setTimeout(()=>{ if(b.isConnected){ delete b.dataset.sure; b.textContent='حذف'; } },4000); return; } const ok=await rpcOk('assess_delete',{p_id:b.dataset.id}); if(!ok) return; await RENDER.assess(); toast('حُذف الامتحان.'); },
+ 'as-rep':b=>drawReportLoad(b.dataset.id),
+ 'as-csv':()=>{ const R=AX.rep; const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"'; const rows=[['الاسم','الإدارة','الحالة','الدرجة','ناجح']].concat(R.learners.map(l=>[l.name,l.dept||'',l.status==='submitted'?'سلّم':l.status==='in_progress'?'لم يسلّم':'لم يبدأ',l.score,l.passed==null?'':(l.passed?'نعم':'لا')])); saveFile('assessment-results.csv','﻿'+rows.map(r=>r.map(q).join(',')).join('\n'),'text/csv;charset=utf-8'); }
+});
+LIVE.AX=AX;
 
 LIVE.openEnrollment=openEnrollment; window.__live=LIVE; LIVE.refreshMe=refreshMe;
 })();
