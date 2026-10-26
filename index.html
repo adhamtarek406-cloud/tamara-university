@@ -3038,7 +3038,7 @@ async function signIn(email,pw,rem){
   go(ROLES[S.role].start); toast(`أهلًا ${S.me.name.split(' ')[0]}، سجّلت الدخول.`);
  }catch(e){ LIVE.tok=null; store.clear(); LIVE.on=false; S.authed=false; AUTH.step='form'; AUTH.err=arErr(e); RENDER.login(); }
 }
-async function startSession(){ const b=await rpc('app_bootstrap'); LIVE.on=true; hydrate(b); LIVE.programsReal=S.programs; applyRoles(); S.authed=true; }
+async function startSession(){ const b=await rpc('app_bootstrap'); LIVE.on=true; hydrate(b); ensureSchools(S.programs); LIVE.programsReal=S.programs; applyRoles(); S.authed=true; }
 window.doLogin=function(){ const em=arguments[0]; signIn(em,DEMO_PW,AUTH.remember); };
 window.logout=function(){ S.authed=false; LIVE.on=false; LIVE.tok=null; store.clear(); PL.reset(); LIVE.exec=null; LIVE.team=null; toggleUmenu(false); closeAsst(); toggleNotifs(false); Object.assign(S,{programs:PROTO.programs}); go('landing'); toast('سجّلت الخروج.'); };
 
@@ -3400,7 +3400,9 @@ Object.assign(ACT,{
 const segToText=b=>b?String(b).split('|').join('\n\n'):'';
 const textToSeg=t=>String(t||'').split(/\n{2,}/).map(x=>x.trim()).filter(Boolean).join('|');
 const lmsProg=x=>({id:x.id,s:x.school,t:x.title,type:TYPE_AR[x.type]||x.type,level:x.level||'أساسي',mode:x.mode||'ذاتي',dur:x.dur||'',d:x.description||'',who:x.who||[],status:x.status,enrolled:x.enrolled||0,updated:rel(x.updated_at),req:!!x.req,steps:x.steps||[],modules:null,questions:[]});
-async function loadLmsPrograms(){ const r=await safe(()=>rpc('lms_programs')); if(!r) return false; LIVE.lmsP=r.map(lmsProg); if(S.role==='lms') S.programs=LIVE.lmsP; return true; }
+function ensureSchools(list){ (list||[]).forEach(x=>{ const id=x.school||x.s; if(id&&!S.schools.some(z=>z.id===id)){ const nm=id==='onb'?'الانضمام':id; S.schools.push({id,name:nm,short:nm,blurb:'',enr:0,rate:0}); } }); }
+ensureSchools([{school:'onb'}]);
+async function loadLmsPrograms(){ const r=await safe(()=>rpc('lms_programs')); if(!r) return false; ensureSchools(r); LIVE.lmsP=r.map(lmsProg); if(S.role==='lms') S.programs=LIVE.lmsP; return true; }
 async function ensureOrg(){ if(LIVE.org) return; const o=await safe(()=>rpc('org_stats')); if(!o) return; LIVE.org=o; S.depts=o.depts.map(d=>({n:d.n,hc:d.hc,aml:0,pdpl:0,cyber:0})); S.countries=o.countries.map(c=>({n:CNAME[c.c]||c.c,hc:c.hc,rate:0})); }
 window.audienceCount=p=>{ const o=LIVE.org; if(!o) return 0; let n=o.depts.filter(d=>p.cfg.depts.includes(d.n)).reduce((a,d)=>a+d.hc,0); const share=o.countries.filter(c=>p.cfg.countries.includes(CNAME[c.c]||c.c)).reduce((a,c)=>a+c.hc,0)/Math.max(1,o.total); n=Math.round(n*share); if(p.cfg.enroll==='open'&&!p.cfg.depts.length) n=Math.round(o.total*share); return n; };
 const bodyIn=l=>(l.type==='قراءة'||l.type==='فيديو')?segToText(l.body):(l.body||'');
