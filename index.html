@@ -3754,6 +3754,130 @@ RENDER.admin=async()=>{ await _adm3(); const panel=[...document.querySelectorAll
  zero.forEach(r=>r.classList.add('zero-hide')); const b=document.createElement('button'); b.className='hbar-more'; b.textContent=`عرض الكليات الأخرى (${zero.length})`; let open=false;
  b.onclick=()=>{ open=!open; zero.forEach(r=>r.classList.toggle('zero-hide',!open)); b.textContent=open?'إخفاء':`عرض الكليات الأخرى (${zero.length})`; }; panel.appendChild(b); };
 
+/* ---------- Rich (interactive) lessons ---------- */
+if(!LT.includes('تفاعلي')) LT.push('تفاعلي');
+const BT={text:'نص',acc:'أكورديون',tabs:'تبويبات',flip:'بطاقات قلب',tl:'خط زمني',img:'صورة',vid:'فيديو',mcq:'سؤال اختيار',ord:'ترتيب الخطوات',mat:'مطابقة',fill:'ملء الفراغ'};
+const blankBlock=t=>({text:{t,h:'',x:''},acc:{t,items:[{q:'',a:''}]},tabs:{t,items:[{q:'',a:''},{q:'',a:''}]},flip:{t,items:[{f:'',b:''}]},tl:{t,items:[{q:'',a:''}]},img:{t,path:'',name:'',alt:'',cap:''},vid:{t,path:'',name:'',cap:''},mcq:{t,q:'',o:['',''],c:0,why:''},ord:{t,q:'',items:['','']},mat:{t,q:'',pairs:[['','']]},fill:{t,x:''}})[t];
+const S_=v=>String(v==null?'':v).trim();
+function docOf(les){ const b=les.body||''; try{ const d=JSON.parse(b); if(d&&Array.isArray(d.blocks)) return d; }catch(_){} return {v:1,blocks:b.trim()?[{t:'text',h:'',x:b.replace(/\|/g,'\n')}]:[]}; }
+const saveDoc=(les,d)=>{ les.body=JSON.stringify(d); };
+const curLes=()=>{ const p=progOf(); return p&&openLes?p.modules[openLes[0]].lessons[openLes[1]]:null; };
+function normBlock(b,allowMedia){ if(!b||typeof b!=='object') return null; const t=b.t;
+ const items=(k1,k2)=>(Array.isArray(b.items)?b.items:[]).map(i=>({[k1]:S_(i&&i[k1]),[k2]:S_(i&&i[k2])})).filter(i=>i[k1]);
+ switch(t){
+  case 'text': return S_(b.x)||S_(b.h)?{t,h:S_(b.h),x:S_(b.x)}:null;
+  case 'acc': case 'tabs': case 'tl': { const it=items('q','a'); return it.length?{t,items:it.slice(0,10)}:null; }
+  case 'flip': { const it=items('f','b'); return it.length?{t,items:it.slice(0,12)}:null; }
+  case 'mcq': { const o=(Array.isArray(b.o)?b.o:[]).map(S_).filter(Boolean).slice(0,5); let c=parseInt(b.c,10); if(!S_(b.q)||o.length<2) return null; if(!(c>=0&&c<o.length)) c=0; return {t,q:S_(b.q),o,c,why:S_(b.why)}; }
+  case 'ord': { const it=(Array.isArray(b.items)?b.items:[]).map(S_).filter(Boolean).slice(0,8); return it.length>=2?{t,q:S_(b.q),items:it}:null; }
+  case 'mat': { const pr=(Array.isArray(b.pairs)?b.pairs:[]).map(x=>Array.isArray(x)?[S_(x[0]),S_(x[1])]:['','']).filter(x=>x[0]&&x[1]).slice(0,8); return pr.length>=2?{t,q:S_(b.q),pairs:pr}:null; }
+  case 'fill': return /\[\[[^\]]+\]\]/.test(S_(b.x))?{t,x:S_(b.x)}:null;
+  case 'img': case 'vid': return allowMedia?{t,path:S_(b.path),name:S_(b.name),alt:S_(b.alt),cap:S_(b.cap)}:null;
+ } return null; }
+/* ----- editor ----- */
+const A_=(o)=>Object.entries(o).map(([k,v])=>v==null?'':` data-${k}="${esc(String(v))}"`).join('');
+const FLD=(bi,f,val,label,o={})=>`<label class="fld ${o.wide===false?'':'wide'}">${label}${o.area?`<textarea rows="${o.rows||3}"${A_({bf:f,bi,ii:o.ii,ik:o.ik})}>${esc(val)}</textarea>`:`<input${A_({bf:f,bi,ii:o.ii,ik:o.ik})} value="${esc(val)}">`}</label>`;
+function listEd(bi,b,f,keys,addLabel){ return `<div class="rb-items">${b[f].map((it,ii)=>`<div class="rb-item">${keys.map(k=>FLD(bi,f,it[k.k],k.l,{ii,ik:k.k,area:k.area,rows:2})).join('')}<button class="iconbtn" data-a="rb-idel" data-bi="${bi}" data-bf="${f}" data-ii="${ii}" aria-label="احذف">${ICX}</button></div>`).join('')}<button class="btn btn-ghost btn-sm" data-a="rb-iadd" data-bi="${bi}" data-bf="${f}">${addLabel}</button></div>`; }
+function blockEd(b,bi,n){
+ let h='';
+ switch(b.t){
+  case 'text': h=FLD(bi,'h',b.h,'العنوان (اختياري)')+FLD(bi,'x',b.x,'النص',{area:1,rows:4}); break;
+  case 'acc': case 'tabs': case 'tl': h=listEd(bi,b,'items',[{k:'q',l:b.t==='tl'?'الخطوة أو التاريخ':'العنوان'},{k:'a',l:'المحتوى',area:1}],'أضف عنصرًا'); break;
+  case 'flip': h=listEd(bi,b,'items',[{k:'f',l:'وجه البطاقة (مصطلح)'},{k:'b',l:'ظهر البطاقة (التعريف)',area:1}],'أضف بطاقة'); break;
+  case 'img': case 'vid': h=`<div class="rb-up"><button class="btn btn-ghost btn-sm" data-a="rb-up" data-bi="${bi}">${b.path?'استبدل الملف':(b.t==='img'?'ارفع صورة':'ارفع فيديو')}</button><span class="meta">${b.path?esc(b.name||'تم الرفع'):'الحد الأقصى 50 ميجا'}</span></div>`+(b.t==='img'?FLD(bi,'alt',b.alt,'وصف الصورة لقارئ الشاشة'):'')+FLD(bi,'cap',b.cap,'تعليق (اختياري)'); break;
+  case 'mcq': h=FLD(bi,'q',b.q,'السؤال')+`<div class="rb-items">${b.o.map((o,ii)=>`<div class="rb-item"><label class="rb-ok"><input type="radio" name="rbc-${bi}" ${b.c===ii?'checked':''}${A_({bf:'c',bi,ii})} aria-label="الإجابة الصحيحة"></label>${FLD(bi,'o',o,'الخيار '+(ii+1),{ii})}${b.o.length>2?`<button class="iconbtn" data-a="rb-idel" data-bi="${bi}" data-bf="o" data-ii="${ii}" aria-label="احذف">${ICX}</button>`:''}</div>`).join('')}${b.o.length<5?`<button class="btn btn-ghost btn-sm" data-a="rb-iadd" data-bi="${bi}" data-bf="o">أضف خيارًا</button>`:''}</div>`+FLD(bi,'why',b.why,'لماذا هذه الإجابة؟ (تظهر بعد التحقق)'); break;
+  case 'ord': h=FLD(bi,'q',b.q,'التعليمات')+`<p class="meta">اكتب الخطوات بالترتيب الصحيح، وسيخلطها النظام للمتعلم.</p><div class="rb-items">${b.items.map((o,ii)=>`<div class="rb-item">${FLD(bi,'items',o,'الخطوة '+(ii+1),{ii})}${b.items.length>2?`<button class="iconbtn" data-a="rb-idel" data-bi="${bi}" data-bf="items" data-ii="${ii}" aria-label="احذف">${ICX}</button>`:''}</div>`).join('')}<button class="btn btn-ghost btn-sm" data-a="rb-iadd" data-bi="${bi}" data-bf="items">أضف خطوة</button></div>`; break;
+  case 'mat': h=FLD(bi,'q',b.q,'التعليمات')+`<div class="rb-items">${b.pairs.map((o,ii)=>`<div class="rb-item">${FLD(bi,'pairs',o[0],'العنصر',{ii,ik:0})}${FLD(bi,'pairs',o[1],'ما يطابقه',{ii,ik:1})}${b.pairs.length>2?`<button class="iconbtn" data-a="rb-idel" data-bi="${bi}" data-bf="pairs" data-ii="${ii}" aria-label="احذف">${ICX}</button>`:''}</div>`).join('')}<button class="btn btn-ghost btn-sm" data-a="rb-iadd" data-bi="${bi}" data-bf="pairs">أضف زوجًا</button></div>`; break;
+  case 'fill': h=FLD(bi,'x',b.x,'النص (ضع الكلمة المخفية بين [[ ]])',{area:1,rows:3}); break;
+ }
+ return `<div class="rb-card"><div class="rb-h"><b>${BT[b.t]}</b><span class="ord"><button class="iconbtn" data-a="rb-mv" data-bi="${bi}" data-d="-1" ${bi===0?'disabled':''} aria-label="لأعلى">${ICU}</button><button class="iconbtn" data-a="rb-mv" data-bi="${bi}" data-d="1" ${bi===n-1?'disabled':''} aria-label="لأسفل">${ICD}</button><button class="iconbtn" data-a="rb-del" data-bi="${bi}" aria-label="احذف البلوك">${ICX}</button></span></div><div class="form">${h}</div></div>`; }
+const _lp=lessonPanel;
+lessonPanel=function(l,mi,li){ if(l.type!=='تفاعلي') return _lp(l,mi,li); const d=docOf(l);
+ return `<div class="lpanel"><div class="form">
+  <label class="fld">العنوان<input data-l="title" value="${esc(l.title)}"></label>
+  <label class="fld">النوع<select data-l="type">${LT.map(t=>`<option ${t===l.type?'selected':''}>${t}</option>`).join('')}</select></label>
+  <label class="fld">المدة<input data-l="dur" value="${esc(l.dur)}"></label>
+  <div class="toggle-row" style="align-self:end;min-height:48px">${sw(l.req,'les-req','مطلوب للإتمام')}مطلوب لإكمال الكورس</div>
+  <div class="wide rb-ai"><label class="fld">ابنِ الدرس بالذكاء الاصطناعي<textarea id="rb-ai-x" rows="4" placeholder="اكتب موضوع الدرس، أو الصق نص سياسة أو دليل أو إجراء، وسأحوّله إلى بلوكات تفاعلية تراجعها وتعدّلها."></textarea></label><div class="rb-aibtn"><button class="btn btn-primary btn-sm" data-a="rb-ai">${IC.spark} ولّد البلوكات</button><span class="meta" id="rb-ai-st"></span></div></div>
+  <div class="wide rb-ed">${d.blocks.map((b,bi)=>blockEd(b,bi,d.blocks.length)).join('')||'<p class="empty" style="margin:8px 0">لا توجد بلوكات بعد. أضف بلوكًا أو ولّد الدرس بالمساعد.</p>'}
+   <div class="rb-add"><select id="rb-t" aria-label="نوع البلوك">${Object.entries(BT).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><button class="btn btn-ghost btn-sm" data-a="rb-add">أضف بلوكًا</button></div></div>
+  ${d.blocks.length?`<details class="wide rb-prev"><summary>معاينة كما يراها المتعلم</summary><div class="stage-body">${richBlocks(d)}</div></details>`:''}
+ </div></div>`; };
+const _re2=window.renderEditor; window.renderEditor=function(){ _re2(); hydrateMedia(document.querySelector('#v-builder')); };
+const rbRefresh=()=>{ renderEditor(); };
+document.addEventListener('input',e=>{ const t=e.target; if(!t||!t.dataset||t.dataset.bf===undefined||t.dataset.bi===undefined) return; const les=curLes(); if(!les) return; const d=docOf(les); const b=d.blocks[+t.dataset.bi]; if(!b) return;
+ let tgt=b,key=t.dataset.bf; const val=t.type==='radio'?+t.dataset.ii:t.value; if(t.type==='radio'){ b.c=val; saveDoc(les,d); return; }
+ if(t.dataset.ii!==undefined){ tgt=b[key]; key=+t.dataset.ii; if(t.dataset.ik!==undefined){ tgt=tgt[key]; key=isNaN(+t.dataset.ik)?t.dataset.ik:+t.dataset.ik; } }
+ tgt[key]=val; saveDoc(les,d); },true);
+document.addEventListener('change',e=>{ const t=e.target; if(t&&t.type==='radio'&&t.dataset&&t.dataset.bf==='c') document.dispatchEvent(Object.assign(new Event('input'),{})); },true);
+/* ----- media ----- */
+const MEDIA=new Map();
+async function mediaFetch(path){ if(MEDIA.has(path)) return MEDIA.get(path); const run=async retry=>{ const r=await fetch(URL_+'/storage/v1/object/authenticated/media/'+path,{headers:{apikey:KEY,Authorization:'Bearer '+(LIVE.tok&&LIVE.tok.at)}}); if(r.status===401&&retry&&await refresh()) return run(false); if(!r.ok) throw new Error('storage_'+r.status); return r.blob(); };
+ const u=URL.createObjectURL(await run(true)); MEDIA.set(path,u); return u; }
+async function mediaUpload(path,file){ const run=async retry=>{ const r=await fetch(URL_+'/storage/v1/object/media/'+path,{method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+(LIVE.tok&&LIVE.tok.at),'x-upsert':'true','Content-Type':file.type||'application/octet-stream'},body:file}); if(r.status===401&&retry&&await refresh()) return run(false); if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(r.status===413||/size|exceed/i.test(j.message||'')?'too_big':('upload_'+r.status)); } }; return run(true); }
+function hydrateMedia(root){ if(!root) return; root.querySelectorAll('[data-media]:not([data-ok])').forEach(el=>{ el.dataset.ok='1'; const p=el.dataset.media; if(!p) return; mediaFetch(p).then(u=>{ el.src=u; }).catch(()=>{ el.insertAdjacentHTML('afterend','<p class="meta">تعذّر تحميل الملف.</p>'); }); }); }
+/* ----- learner renderer ----- */
+const shuffle=a=>{ const x=a.slice(); for(let i=x.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [x[i],x[j]]=[x[j],x[i]]; } if(x.length>1&&x.every((v,i)=>v===a[i])) x.push(x.shift()); return x; };
+const paras=s=>esc(s).split(/\n+/).filter(Boolean).map(p=>`<p>${p}</p>`).join('');
+function blockHTML(b,i){
+ switch(b.t){
+  case 'text': return `<div class="rb">${b.h?`<h3>${esc(b.h)}</h3>`:''}${paras(b.x)}</div>`;
+  case 'acc': return `<div class="rb">${b.items.map(it=>`<details class="rb-acc"><summary>${esc(it.q)}</summary><div>${paras(it.a)}</div></details>`).join('')}</div>`;
+  case 'tabs': return `<div class="rb rb-tabs"><div class="rb-tablist" role="tablist">${b.items.map((it,k)=>`<button role="tab" aria-selected="${k===0}" data-a="rb-tab" data-k="${k}">${esc(it.q)}</button>`).join('')}</div>${b.items.map((it,k)=>`<div class="rb-pane" role="tabpanel" ${k?'hidden':''}>${paras(it.a)}</div>`).join('')}</div>`;
+  case 'flip': return `<div class="rb rb-flips">${b.items.map(it=>`<button class="rb-flip" data-a="rb-flip" aria-pressed="false"><span class="ff">${esc(it.f)}<small>اضغط لقلب البطاقة</small></span><span class="fb">${esc(it.b)}</span></button>`).join('')}</div>`;
+  case 'tl': return `<div class="rb"><ol class="rb-tl">${b.items.map(it=>`<li><b>${esc(it.q)}</b>${it.a?`<p>${esc(it.a)}</p>`:''}</li>`).join('')}</ol></div>`;
+  case 'img': return b.path?`<figure class="rb rb-fig"><img data-media="${esc(b.path)}" alt="${esc(b.alt)}">${b.cap?`<figcaption>${esc(b.cap)}</figcaption>`:''}</figure>`:'';
+  case 'vid': return b.path?`<figure class="rb rb-fig"><video controls preload="metadata" data-media="${esc(b.path)}"></video>${b.cap?`<figcaption>${esc(b.cap)}</figcaption>`:''}</figure>`:'';
+  case 'mcq': return `<div class="rb rb-q" data-ans="${b.c}" data-why="${esc(b.why)}"><p class="qtext">${esc(b.q)}</p><div class="choices" role="radiogroup">${b.o.map((o,k)=>`<button class="choice" role="radio" aria-checked="false" data-a="rb-mcq" data-k="${k}"><span class="r"></span>${esc(o)}</button>`).join('')}</div><div class="rb-fb" aria-live="polite"></div></div>`;
+  case 'ord': return `<div class="rb rb-q" data-ans="${encodeURIComponent(JSON.stringify(b.items))}"><p class="qtext">${esc(b.q||'رتّب الخطوات بالترتيب الصحيح')}</p><ol class="rb-ord">${shuffle(b.items).map(o=>`<li><span>${esc(o)}</span><span class="ord"><button class="iconbtn" data-a="rb-up2" aria-label="لأعلى">${ICU}</button><button class="iconbtn" data-a="rb-dn2" aria-label="لأسفل">${ICD}</button></span></li>`).join('')}</ol><button class="btn btn-primary btn-sm" data-a="rb-chk-ord">تحقق</button><div class="rb-fb" aria-live="polite"></div></div>`;
+  case 'mat': { const rs=shuffle(b.pairs.map(p=>p[1])); return `<div class="rb rb-q" data-ans="${encodeURIComponent(JSON.stringify(b.pairs))}"><p class="qtext">${esc(b.q||'طابق كل عنصر بما يناسبه')}</p>${b.pairs.map((p,k)=>`<div class="rb-mrow"><span>${esc(p[0])}</span><select data-k="${k}" aria-label="${esc(p[0])}"><option value="">اختر…</option>${rs.map(r=>`<option>${esc(r)}</option>`).join('')}</select></div>`).join('')}<button class="btn btn-primary btn-sm" data-a="rb-chk-mat">تحقق</button><div class="rb-fb" aria-live="polite"></div></div>`; }
+  case 'fill': { const ans=[]; const html=esc(b.x).replace(/\[\[([^\]]+)\]\]/g,(_,w)=>{ ans.push(w.trim()); return `<input class="rb-blank" data-w="${ans.length-1}" size="${Math.max(6,w.length+2)}" aria-label="الفراغ ${ans.length}">`; }); return `<div class="rb rb-q" data-ans="${encodeURIComponent(JSON.stringify(ans))}"><p class="qtext" style="line-height:2.2">${html}</p><button class="btn btn-primary btn-sm" data-a="rb-chk-fill">تحقق</button><div class="rb-fb" aria-live="polite"></div></div>`; }
+ } return ''; }
+const richBlocks=d=>d.blocks.map(blockHTML).join('');
+const richHTML=l=>`<div class="stage-body rich">${richBlocks(docOf(l))}</div>`;
+const _lh2=lessonHTML2; lessonHTML2=function(l){ if(l.ltype==='rich') return lhead2(l)+richHTML(l)+lfoot2(l,true); return _lh2(l); };
+const _dp=drawPlayer; drawPlayer=function(){ _dp(); hydrateMedia($('#v-player')); };
+const fb=(el,ok,msg)=>{ const f=el.querySelector('.rb-fb'); f.className='rb-fb feedback '+(ok?'ok':'no'); f.innerHTML=`<b>${ok?'صحيح':'ليس بعد'}</b>${msg?`<p>${esc(msg)}</p>`:''}`; };
+/* ----- AI ----- */
+const SYS_RICH='أنت مصمم تعليمي لجامعة تمارا (أكاديمية داخلية لشركة تمارا). حوّل المدخل إلى درس تفاعلي بالعربية الفصحى المبسطة، واعتمد على المدخل فقط ولا تخترع أرقامًا أو سياسات أو أسماء. أجب بـ JSON فقط بالشكل {"blocks":[...]} من 6 إلى 10 بلوكات بترتيب تعليمي منطقي، فيها سؤالان تفاعليان على الأقل. أنواع البلوكات: {"t":"text","h":"عنوان","x":"فقرة"} · {"t":"acc","items":[{"q":"عنوان","a":"شرح"}]} · {"t":"tabs","items":[{"q":"عنوان التبويب","a":"محتواه"}]} · {"t":"flip","items":[{"f":"مصطلح","b":"تعريفه"}]} · {"t":"tl","items":[{"q":"الخطوة","a":"وصفها"}]} · {"t":"mcq","q":"سؤال","o":["خيار","خيار","خيار"],"c":0,"why":"سبب الإجابة الصحيحة"} · {"t":"ord","q":"تعليمات","items":["الخطوة الأولى","الثانية","الثالثة"]} (بالترتيب الصحيح) · {"t":"mat","q":"تعليمات","pairs":[["عنصر","ما يطابقه"],["عنصر","ما يطابقه"]]} · {"t":"fill","x":"جملة فيها [[كلمة]] مخفية"}. لا تستخدم صورًا ولا فيديو. '+SYS_JSON;
+function localBlocks(text){ const ps=text.split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean); if(!ps.length) return []; const out=[{t:'text',h:'',x:ps[0]}]; const rest=ps.slice(1); if(rest.length) out.push({t:'acc',items:rest.slice(0,8).map(p=>{ const first=p.split(/[.،:\n]/)[0].trim().slice(0,70); return {q:first||'تفصيل',a:p}; })}); return out; }
+Object.assign(ACT,{
+ 'rb-add':async()=>{ const les=curLes(); if(!les) return; const d=docOf(les); d.blocks.push(blankBlock($('#rb-t').value)); saveDoc(les,d); rbRefresh(); },
+ 'rb-del':async b=>{ const les=curLes(); const d=docOf(les); d.blocks.splice(+b.dataset.bi,1); saveDoc(les,d); rbRefresh(); },
+ 'rb-mv':async b=>{ const les=curLes(); const d=docOf(les); const i=+b.dataset.bi, j=i+ +b.dataset.d; if(j<0||j>=d.blocks.length) return; [d.blocks[i],d.blocks[j]]=[d.blocks[j],d.blocks[i]]; saveDoc(les,d); rbRefresh(); },
+ 'rb-iadd':async b=>{ const les=curLes(); const d=docOf(les); const bl=d.blocks[+b.dataset.bi]; const f=b.dataset.bf; const arr=bl[f]; const tmpl=blankBlock(bl.t); const t0=tmpl[f][0]; arr.push(typeof t0==='string'?'':JSON.parse(JSON.stringify(t0))); saveDoc(les,d); rbRefresh(); },
+ 'rb-idel':async b=>{ const les=curLes(); const d=docOf(les); const bl=d.blocks[+b.dataset.bi]; const arr=bl[b.dataset.bf]; const ii=+b.dataset.ii; arr.splice(ii,1); if(bl.t==='mcq'&&b.dataset.bf==='o'&&bl.c>=arr.length) bl.c=0; if(!arr.length){ arr.push(typeof blankBlock(bl.t)[b.dataset.bf][0]==='string'?'':JSON.parse(JSON.stringify(blankBlock(bl.t)[b.dataset.bf][0]))); } saveDoc(les,d); rbRefresh(); },
+ 'rb-up':async b=>{ const p=progOf(); if(!p||p.isNew){ toast('احفظ الكورس أولًا ثم ارفع الملف.'); return; } const les=curLes(); const bi=+b.dataset.bi; const bl=docOf(les).blocks[bi]; const inp=document.createElement('input'); inp.type='file'; inp.accept=bl.t==='img'?'image/png,image/jpeg,image/gif,image/webp,image/svg+xml':'video/mp4,video/webm';
+  inp.onchange=async()=>{ const f=inp.files[0]; if(!f) return; if(f.size>50*1024*1024){ toast('حجم الملف أكبر من 50 ميجا.'); return; } toast('جارٍ الرفع…'); const path=`${p.id}/${Date.now()}-${f.name.replace(/[^\w.-]/g,'_')}`;
+   try{ await mediaUpload(path,f); const d=docOf(curLes()); d.blocks[bi].path=path; d.blocks[bi].name=f.name; saveDoc(curLes(),d); rbRefresh(); toast('رُفع الملف. احفظ الكورس لتثبيته.'); }catch(e){ toast((e&&e.message)==='too_big'?'حجم الملف أكبر من الحد المسموح.':/forbidden|403/.test((e&&e.message)||'')?'ليست لديك صلاحية الرفع.':'تعذّر رفع الملف.'); } };
+  inp.click(); },
+ 'rb-ai':async b=>{ const les=curLes(); const txt=S_($('#rb-ai-x').value); if(txt.length<12){ toast('اكتب وصفًا أو الصق نصًا أطول قليلًا.'); return; } const st=$('#rb-ai-st'); b.disabled=true; st.textContent='جارٍ بناء الدرس…'; let blocks=null, usedAI=true;
+  try{ const j=await aiCall({messages:[{role:'user',content:txt.slice(0,12000)}],tier:'default',system:SYS_RICH,max_tokens:4000}); const o=parseJSONLoose(j.text); blocks=(Array.isArray(o)?o:o.blocks||[]).map(x=>normBlock(x,false)).filter(Boolean); if(!blocks.length) throw {code:'bad'}; }
+  catch(e){ usedAI=false; blocks=localBlocks(txt); if(e&&e.code==='rate_limited') toast('المساعد مشغول الآن، فبنيت لك هيكلًا بسيطًا من نصك.'); else if(e&&e.code!=='not_granted') toast('تعذّر الاتصال بالمساعد، فبنيت لك هيكلًا بسيطًا من نصك.'); }
+  b.disabled=false; if(!blocks.length){ st.textContent=''; return; } const d=docOf(les); d.blocks=d.blocks.concat(blocks); saveDoc(les,d); rbRefresh(); toast(usedAI?`أُضيفت ${blocks.length} بلوكات. راجعها وعدّلها قبل الحفظ.`:'أُضيف هيكل بسيط من نصك. فعّل المساعد لبناء أسئلة وبطاقات تلقائيًا.'); },
+ 'rb-tab':async b=>{ const w=b.closest('.rb-tabs'); w.querySelectorAll('[role=tab]').forEach(x=>x.setAttribute('aria-selected',x===b)); w.querySelectorAll('.rb-pane').forEach((p,i)=>{ p.hidden=i!==+b.dataset.k; }); },
+ 'rb-flip':async b=>{ b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')!=='true'); },
+ 'rb-mcq':async b=>{ const q=b.closest('.rb-q'); if(q.dataset.done) return; const ok=+b.dataset.k===+q.dataset.ans; q.querySelectorAll('.choice').forEach(c=>{ c.setAttribute('aria-checked',c===b); c.classList.remove('right','wrong'); }); b.classList.add(ok?'right':'wrong'); if(ok) q.dataset.done='1'; fb(q,ok,ok?q.dataset.why:(q.dataset.why?'جرّب خيارًا آخر.':'جرّب خيارًا آخر.')); },
+ 'rb-up2':async b=>{ const li=b.closest('li'); if(li.previousElementSibling) li.parentNode.insertBefore(li,li.previousElementSibling); },
+ 'rb-dn2':async b=>{ const li=b.closest('li'); if(li.nextElementSibling) li.parentNode.insertBefore(li.nextElementSibling,li); },
+ 'rb-chk-ord':async b=>{ const q=b.closest('.rb-q'); const ans=JSON.parse(decodeURIComponent(q.dataset.ans)); const cur=[...q.querySelectorAll('.rb-ord li>span:first-child')].map(x=>x.textContent); const ok=cur.every((x,i)=>x===ans[i]); fb(q,ok,ok?'الترتيب صحيح.':'الترتيب غير صحيح، حاول مرة أخرى.'); },
+ 'rb-chk-mat':async b=>{ const q=b.closest('.rb-q'); const ans=JSON.parse(decodeURIComponent(q.dataset.ans)); const sel=[...q.querySelectorAll('select')]; const ok=sel.every(s=>s.value===ans[+s.dataset.k][1]); sel.forEach(s=>s.classList.toggle('bad',s.value!==ans[+s.dataset.k][1])); fb(q,ok,ok?'كل المطابقات صحيحة.':'بعض المطابقات غير صحيحة.'); },
+ 'rb-chk-fill':async b=>{ const q=b.closest('.rb-q'); const ans=JSON.parse(decodeURIComponent(q.dataset.ans)); const ins=[...q.querySelectorAll('.rb-blank')]; const n=s=>s.trim().toLowerCase(); const ok=ins.every(i=>n(i.value)===n(ans[+i.dataset.w])); ins.forEach(i=>i.classList.toggle('bad',n(i.value)!==n(ans[+i.dataset.w]))); fb(q,ok,ok?'':'راجع الإجابات المظللة.'); }
+});
+(()=>{ const st=document.createElement('style'); st.textContent=`
+.rich .rb{margin:0 0 22px}.rich h3{margin:0 0 6px;font-size:18px}.rich p{margin:0 0 10px;line-height:1.9}
+.rb-acc{border:1px solid var(--line,#e3e1f1);border-radius:14px;margin-bottom:10px;background:var(--surface,#fff)}.rb-acc summary{cursor:pointer;padding:14px 18px;font-weight:600}.rb-acc>div{padding:0 18px 14px}
+.rb-tablist{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.rb-tablist button{border:1px solid var(--line,#e3e1f1);background:var(--surface,#fff);border-radius:999px;padding:8px 16px;cursor:pointer;font:inherit}.rb-tablist button[aria-selected=true]{background:var(--lavender,#7E4EB2);color:#fff;border-color:transparent}
+.rb-pane{padding:16px 18px;border-radius:14px;background:var(--surface-2,#f6f5ff)}
+.rb-flips{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}.rb-flip{min-height:130px;border:0;border-radius:18px;padding:18px;cursor:pointer;font:inherit;text-align:center;background:var(--hero,#1a1a2e);color:#fff;display:grid;place-items:center}.rb-flip .fb,.rb-flip[aria-pressed=true] .ff{display:none}.rb-flip[aria-pressed=true] .fb{display:block;line-height:1.7}.rb-flip .ff{font-size:18px;font-weight:700}.rb-flip small{display:block;font-weight:400;opacity:.7;font-size:12px;margin-top:6px}
+.rb-tl{list-style:none;margin:0;padding:0;border-inline-start:3px solid var(--lavender,#7E4EB2)}.rb-tl li{position:relative;padding:0 20px 18px}.rb-tl li:before{content:"";position:absolute;inset-inline-start:-9px;top:5px;width:15px;height:15px;border-radius:50%;background:var(--lavender,#7E4EB2)}
+.rb-fig img,.rb-fig video{max-width:100%;border-radius:16px;display:block}.rb-fig figcaption{color:var(--muted,#6b6a85);font-size:14px;margin-top:6px}
+.rb-q{padding:18px;border:1px solid var(--line,#e3e1f1);border-radius:18px;background:var(--surface,#fff)}.rb-fb{margin-top:12px}.rb-fb:empty{display:none}
+.rb-ord{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:8px}.rb-ord li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;border-radius:12px;background:var(--surface-2,#f6f5ff)}
+.rb-mrow{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center;margin-bottom:8px}.rb-mrow select,.rb-blank{font:inherit;padding:8px 10px;border-radius:10px;border:1px solid var(--line,#cfcde6);background:var(--surface,#fff)}.bad{border-color:#d33!important;background:#fff3f3!important}
+.rb-card{border:1px solid var(--line,#e3e1f1);border-radius:16px;padding:14px;margin-bottom:12px;background:var(--surface,#fff)}.rb-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.rb-items{display:grid;gap:8px}.rb-item{display:flex;gap:8px;align-items:flex-end}.rb-item .fld{flex:1;min-width:0}.rb-ok{padding-bottom:12px}.rb-add{display:flex;gap:8px;align-items:center;margin:8px 0}.rb-ai{background:var(--surface-2,#f6f5ff);border-radius:16px;padding:14px}.rb-aibtn{display:flex;gap:10px;align-items:center;margin-top:8px}.rb-prev summary{cursor:pointer;font-weight:600;padding:8px 0}.rb-up{display:flex;gap:10px;align-items:center;margin-bottom:8px}
+@media(max-width:600px){.rb-mrow{grid-template-columns:1fr}}`; document.head.appendChild(st); })();
+
 LIVE.openEnrollment=openEnrollment; window.__live=LIVE; LIVE.refreshMe=refreshMe;
 })();
 
