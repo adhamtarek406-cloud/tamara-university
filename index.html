@@ -2924,6 +2924,57 @@ try{ if(localStorage.getItem('tu-lang')==='en') setLang('en'); }catch(_){}
    Sits on top of the prototype script: real login, real data, real player. */
 (()=>{
 'use strict';
+
+/* ===== UI polish ===== */
+(()=>{ const st=document.createElement('style'); st.id='ui-polish'; st.textContent=`
+:root{--muted:#5A6085;--gap:24px}
+/* 2: slim demo notice */
+.proto{display:none!important}
+.demo-pill{font-size:11.5px;font-weight:600;color:var(--brand-text);background:var(--primary-softer);border-radius:999px;padding:3px 10px;white-space:nowrap;cursor:default}
+@media (max-width:1180px){.demo-pill{display:none}}
+/* 1: nav with overflow menu */
+@media (min-width:701px){nav{overflow:visible}}
+.nav-more{position:relative;display:inline-flex}
+.nav-more .more-btn{background:none;border:0;color:var(--muted);padding:10px 16px;border-radius:999px;white-space:nowrap;font-weight:500;cursor:pointer}
+.nav-more .more-btn:hover,.nav-more.open .more-btn{background:var(--primary-softer);color:var(--brand-text)}
+.nav-more .more-btn[aria-current="page"]{color:var(--brand-text);background:var(--primary-softer);font-weight:600}
+.nav-pop{display:none;position:absolute;top:calc(100% + 8px);inset-inline-start:0;z-index:40;min-width:200px;background:var(--surface);border-radius:18px;box-shadow:var(--shadow-lg);padding:8px;flex-direction:column;gap:2px}
+.nav-more.open .nav-pop{display:flex}
+.nav-pop button{text-align:start;width:100%;border-radius:12px!important}
+@media (max-width:1180px){.role>span{display:none}.user>div{display:none}.topbar-in{gap:8px;padding-inline:12px}.role select{max-width:150px}.hicon{width:36px;height:36px}}
+@media (max-width:1180px) and (min-width:701px){.topbar,main{max-width:100vw;overflow-x:clip}}
+/* 3: one spacing system */
+main{padding-top:24px}
+.view>.hero{margin-bottom:var(--gap)}
+.view>.panel,.view>.two,.view>.stack,.view>.kpis,.view>.grid,.view>.col{margin-top:0;margin-bottom:var(--gap)}
+.view>:last-child{margin-bottom:0}
+.kpis{margin-bottom:var(--gap)}
+#ap-panel{margin:0 0 var(--gap)!important}
+.panel h2{margin-bottom:6px}
+.panel .sub{color:var(--body);font-size:14.5px;line-height:1.6}
+/* 4: balanced rows */
+.appr{grid-template-columns:1fr auto;column-gap:20px;align-items:center;padding:16px 0}
+.appr>b,.appr>span{grid-column:1}
+.appr>.acts{grid-column:2;grid-row:1 / span 3;margin:0;align-self:center;flex-wrap:wrap;justify-content:flex-end}
+@media (max-width:640px){.appr{grid-template-columns:1fr}.appr>.acts{grid-column:1;grid-row:auto;margin-top:10px;justify-content:flex-start}}
+.checklist{gap:0}
+.ck{padding:12px 0;border-top:1px solid var(--line)}
+.ck:first-child{border-top:0;padding-top:4px}
+.ck:not(.ok) i{background:transparent;border:2px solid var(--line-strong)}
+.ck .rowbtn{background:var(--primary-softer);padding:6px 14px}
+/* 5: charts fill their card; empty rows folded */
+.panel:has(>.weeks){display:flex;flex-direction:column}
+.panel>.weeks{flex:1;min-height:200px;height:auto}
+.hbar.zero-hide{display:none}
+.hbar-more{background:none;border:0;color:var(--brand-text);font-weight:600;font-size:13px;padding:8px 0 0;cursor:pointer}
+/* 6: compact assistant button and friendlier toast */
+.fab{padding:0;width:52px;min-height:52px;justify-content:center;bottom:calc(20px + env(safe-area-inset-bottom,0px));inset-inline-end:20px;box-shadow:var(--shadow-md)}
+.fab span{display:none}
+.toast{max-width:min(560px,92vw);white-space:normal;text-align:center;border-radius:18px;line-height:1.6;bottom:calc(88px + env(safe-area-inset-bottom,0px))}
+/* 7: calmer buttons and readable meta */
+.kpi small,.appr .meta,.hbar span small{color:var(--muted)}
+.btn-primary{box-shadow:none}
+`; document.head.appendChild(st); })();
 const URL_='https://fzhvkkullbmfmxsbdtfj.supabase.co', KEY='sb_publishable_g3KMZSys2gMtrsUbXh38oA_FeDqV3Bj';
 const DEMO_PW='Tamara@Demo2026';
 const PROTO={programs:S.programs, team:S.team, notifs:S.notifs, depts:S.depts, weeks:S.weeks, countries:S.countries, log:S.log, approvals:S.approvals, mcourses:S.mcourses, me:S.me, certs:S.certs, otherCerts:S.otherCerts};
@@ -3436,6 +3487,7 @@ window.renderEditor=function(){ const p=progOf(); if(!LIVE.on||!p) return _re();
  live.querySelectorAll('[data-a="del-course"]').forEach(b=>{ if(p.isNew) b.remove(); });
  live.querySelectorAll('.panel .sub').forEach(x=>{ if(x.textContent.includes('أُرسل للمراجعة من الكلية')) x.textContent='أُرسل لاعتماد الإدارة. لا يمكن تعديله حتى تعتمده أو تعيده إليك.'; if(x.textContent.includes('مسودة لا يراها الموظفون')) x.textContent='مسودة لا يراها الموظفون. أرسلها للاعتماد ليُنشر بعد موافقة الإدارة.'; });
  if(p.status==='review') live.querySelectorAll('#ctab-body input, #ctab-body textarea, #ctab-body select, #ctab-body .btn:not([data-a="preview"]):not([data-a="ctab"])').forEach(x=>{ x.disabled=true; });
+ { const pb=live.querySelectorAll('[data-a="publish"]'); if(pb.length>1){ pb[0].classList.remove('btn-primary'); pb[0].classList.add('btn-ghost'); } }
  const sel=live.querySelector('#add-l'); if(sel&&LIVE.usr){ const here=new Set(learnersOf(p).map(l=>l.n)); sel.innerHTML=LIVE.usr.users.filter(u=>u.status==='active'&&!here.has(u.name)).slice(0,300).map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join(''); }
  if(ctab==='overview'&&LIVE.pe&&LIVE.pe.report&&p.status==='published'){ const R=LIVE.pe.report, ks=live.querySelectorAll('.kpis .kpi b'); if(ks.length>=3){ ks[0].textContent=R.enrolled.toLocaleString('en'); ks[1].textContent=R.rate+'%'; ks[2].textContent=R.rating&&R.rating.avg?R.rating.avg:'–'; } }
  if(ctab==='reports'&&p.status==='published'&&LIVE.pe&&LIVE.pe.report){ const R=LIVE.pe.report, dist=R.rating?R.rating.dist:[0,0,0,0,0], tot=Math.max(1,R.rating?R.rating.count:0);
@@ -3545,6 +3597,32 @@ Object.assign(ACT,{
  'sc-create':async()=>{ const d=$('#scormdlg'); if(d&&d.open) d.close(); toast('فحص الحزمة نجح، لكن استضافة حزم SCORM وتشغيلها للمتعلمين لم تُفعَّل بعد. استخدم «من مستند» أو المحرّر لإنشاء كورس فعلي.'); },
  'scorm-play':async()=>{ toast('تشغيل حزم SCORM غير مفعّل بعد.'); }
 });
+
+
+/* ---------- UI polish: nav overflow, demo pill, folded rows ---------- */
+(()=>{ const nav=document.getElementById('nav'); if(!nav) return;
+ const obs=new MutationObserver(()=>organizeNav());
+ function organizeNav(){ obs.disconnect(); try{
+   nav.querySelectorAll('.nav-more').forEach(m=>{ [...m.querySelectorAll('.nav-pop>button')].forEach(b=>nav.insertBefore(b,m)); m.remove(); });
+   const btns=[...nav.querySelectorAll(':scope>button[data-go]')]; const w=window.innerWidth;
+   const max=w<=700?99:(w<1100?3:(w<1280?4:5));
+   if(btns.length>max+1){ const cur=btns.find(b=>b.getAttribute('aria-current')==='page'); const keep=btns.slice(0,max); const inKeep=cur?keep.includes(cur):true; if(!inKeep) keep[max-1]=cur;
+    const rest=btns.filter(b=>!keep.includes(b)); const wrap=document.createElement('div'); wrap.className='nav-more';
+    wrap.innerHTML=`<button class="more-btn" data-a="nav-more" aria-haspopup="true" aria-expanded="false" ${rest.includes(cur)?'aria-current="page"':''}>المزيد ▾</button><div class="nav-pop"></div>`;
+    const pop=wrap.querySelector('.nav-pop'); rest.forEach(b=>pop.appendChild(b)); nav.appendChild(wrap); }
+  }finally{ obs.observe(nav,{childList:true}); } }
+ obs.observe(nav,{childList:true}); organizeNav(); window.addEventListener('resize',()=>{ clearTimeout(organizeNav.t); organizeNav.t=setTimeout(organizeNav,150); });
+ document.addEventListener('click',e=>{ const mb=e.target.closest&&e.target.closest('.more-btn'); const open=nav.querySelector('.nav-more.open');
+  if(mb){ e.stopImmediatePropagation(); const m=mb.parentElement; const on=!m.classList.contains('open'); m.classList.toggle('open',on); mb.setAttribute('aria-expanded',on); return; }
+  if(open&&!e.target.closest('.nav-pop')){ open.classList.remove('open'); open.querySelector('.more-btn').setAttribute('aria-expanded','false'); } },true);
+ const br=document.querySelector('.topbar .brand'); if(br&&!document.querySelector('.demo-pill')){ const p=document.createElement('span'); p.className='demo-pill'; p.textContent='نسخة تجريبية'; p.title='بيانات تجريبية للاختبار وجمع الملاحظات'; br.after(p); }
+ const fab=document.getElementById('fab'); if(fab){ fab.title='المساعد التعليمي'; fab.setAttribute('aria-label','المساعد التعليمي'); }
+})();
+const _adm3=RENDER.admin;
+RENDER.admin=async()=>{ await _adm3(); const panel=[...document.querySelectorAll('#v-admin .panel')].find(p=>p.querySelector('h2')&&p.querySelector('h2').textContent.trim()==='الكليات'); if(!panel) return;
+ const rows=[...panel.querySelectorAll('.hbar')]; const zero=rows.filter(r=>/^\s*0\s/.test(r.querySelector('span small')?r.querySelector('span small').textContent:'')); if(zero.length<2) return;
+ zero.forEach(r=>r.classList.add('zero-hide')); const b=document.createElement('button'); b.className='hbar-more'; b.textContent=`عرض الكليات الأخرى (${zero.length})`; let open=false;
+ b.onclick=()=>{ open=!open; zero.forEach(r=>r.classList.toggle('zero-hide',!open)); b.textContent=open?'إخفاء':`عرض الكليات الأخرى (${zero.length})`; }; panel.appendChild(b); };
 
 window.__live=LIVE; LIVE.refreshMe=refreshMe;
 })();
