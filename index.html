@@ -4390,6 +4390,236 @@ Object.assign(ADD,{"نجحت": "Passed", "لم تنجح بعد": "Not passed yet
  for(const k in ADD){ if(/[.…]$/.test(k)) continue; if(TRs[k]) continue; TRs[k]=ADD[k]; let kk=k, v=ADD[k]; if(!TRN.has(kk)) TRN.set(kk,v); if(/[A-Za-z]/.test(k)&&!MIXED.includes(k)) MIXED.push(k); const f=k.split(/[\s،؛؟]/)[0]; if(!BYFIRST.has(f)) BYFIRST.set(f,[]); const a=BYFIRST.get(f); if(!a.includes(kk)){ a.push(kk); a.sort((x,y)=>y.length-x.length); } }
 })();
 
+/* ===== Pro course generator: analyse -> lessons (rich blocks) -> exam -> QA ===== */
+(()=>{
+const LNG=o=>o.lang==='الإنجليزية'?'English':'Modern Standard Arabic (clear, professional, short sentences; no slang)';
+const CHECKS=['mcq','ms','sa','br','cls','ord','mat','fill'];
+const SCHEMA=`BLOCK TYPES (each block is a JSON object; use only these):
+{"t":"text","h":"short heading (optional)","x":"paragraph; use \\n between paragraphs"}
+{"t":"call","k":"info|tip|warn|err","h":"title","x":"text"}   (err = common mistake)
+{"t":"tl","items":[{"q":"step title","a":"what happens / what to do"}]}   (process, 3-7 steps)
+{"t":"tbl","cols":["",""],"rows":[["",""]]}   (comparisons, thresholds, who-does-what)
+{"t":"acc","items":[{"q":"question or topic","a":"answer"}]}   (details, exceptions, FAQ)
+{"t":"flip","items":[{"f":"term","b":"definition in one sentence"}]}   (key terms)
+{"t":"br","q":"realistic situation, then: what do you do?","o":[{"a":"option","r":"feedback explaining the consequence","ok":true}]}   (decision scenario, 3 options, feedback for EVERY option, 1 or 2 ok:true)
+{"t":"mcq","q":"","o":["","","",""],"c":0,"why":"explanation"}
+{"t":"ms","q":"select all that apply","o":["","","",""],"c":[0,2],"why":""}
+{"t":"ord","q":"put in the correct order","items":["first","second","third"]}   (items listed in the CORRECT order)
+{"t":"mat","q":"match","pairs":[["left","right"],["left","right"]]}
+{"t":"cls","q":"sort each item","cats":["A","B"],"items":[{"x":"item","c":0}]}
+{"t":"fill","x":"sentence with the hidden word in double brackets like [[word]]"}
+{"t":"sa","q":"short answer","ans":["accepted answer","alternative"],"why":""}`;
+const words=s=>(String(s||'').match(/\S+/g)||[]).length;
+const flat=b=>{ if(!b) return ''; const p=[b.h,b.x,b.q,b.why]; (b.items||[]).forEach(i=>{ if(typeof i==='string') p.push(i); else p.push(i&&i.q,i&&i.a,i&&i.f,i&&i.b,i&&i.x); }); (b.o||[]).forEach(o=>p.push(typeof o==='string'?o:(o&&o.a)+' '+(o&&o.r))); (b.rows||[]).forEach(r=>p.push(r.join(' | '))); (b.pairs||[]).forEach(r=>p.push(r.join(' - '))); return p.filter(Boolean).join(' '); };
+const T2=(ar,en)=>LANG==='en'?en:ar;
+function prog(msg){ GEN.prog=msg; const el=document.getElementById('gprog'); if(el) el.textContent=msg; }
+async function pool(items,n,fn,sig){ const out=new Array(items.length); let i=0; await Promise.all(Array.from({length:Math.min(n,items.length)},async()=>{ while(i<items.length){ if(sig&&sig.aborted) throw {code:'aborted'}; const k=i++; out[k]=await fn(items[k],k); } })); return out; }
+const shuffle=a=>{ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+
+/* ---- stage 1: analysis & blueprint ---- */
+function sizing(len,scen){ const L=+len||30; const m=L<=15?'2 modules, 3-4 lessons in total':L<=30?'3 modules, 5-7 lessons in total':'4-5 modules, 8-11 lessons in total'; return m+(scen?'; at least one lesson of kind "scenario"':''); }
+async function analyse(doc,o,sig){
+ const p=`You are a senior instructional designer building a professional internal course for Tamara (a Saudi fintech, buy-now-pay-later). Analyse the SOURCE DOCUMENT and design the course blueprint.
+Write all learner-facing text in ${LNG(o)}.
+Level: ${o.level}. Target total duration about ${o.len} minutes. Size: ${sizing(o.len,o.scen)}. Each lesson 3-8 minutes.
+Rules:
+- Use ONLY the source document. Never invent rules, numbers, deadlines, systems or owners.
+- "facts" must be concrete items copied faithfully from the source (numbers, time limits, thresholds, roles, systems, named steps, conditions). Up to 40.
+- "objectives": 4-7 measurable objectives, each starting with an action verb, mixing remember/understand/apply/analyze levels.
+- Order lessons so each builds on the previous; avoid overlap between lessons.
+- "gaps": things unclear, missing or contradictory in the source that a human owner must confirm.
+Return JSON only:
+{"title":"","description":"two sentences on what the learner will be able to do","audience":[""],"level":"أساسي|متوسط|متقدم","duration":"${o.len} دقيقة",
+"objectives":[{"text":"","bloom":"remember|understand|apply|analyze|evaluate"}],
+"facts":[""],"terms":[{"term":"","definition":""}],
+"modules":[{"title":"","goal":"","lessons":[{"title":"","focus":"what exactly this lesson teaches and which source sections it draws on","kind":"concept|process|policy|scenario|reference","minutes":5}]}],
+"gaps":[""]}
+SOURCE DOCUMENT (${doc.name}):
+"""
+${doc.text.slice(0,60000)}
+"""`;
+ const r=await sampleFn.json(p,{modelTier:'default',signal:sig,max_tokens:4000,cache:false});
+ if(!r||!Array.isArray(r.modules)) throw {code:'bad'};
+ r.modules=r.modules.filter(m=>m&&Array.isArray(m.lessons)).map(m=>({title:String(m.title||''),goal:String(m.goal||''),lessons:m.lessons.filter(l=>l&&l.title).slice(0,6).map(l=>({title:String(l.title),focus:String(l.focus||''),kind:String(l.kind||'concept'),minutes:Math.min(10,Math.max(3,+l.minutes||5))}))})).filter(m=>m.lessons.length).slice(0,6);
+ if(!r.modules.length) throw {code:'bad'};
+ let total=0; r.modules.forEach(m=>{ m.lessons=m.lessons.slice(0,Math.max(0,12-total)); total+=m.lessons.length; }); r.modules=r.modules.filter(m=>m.lessons.length);
+ r.objectives=(Array.isArray(r.objectives)?r.objectives:[]).map(x=>typeof x==='string'?{text:x,bloom:'understand'}:{text:String(x&&x.text||''),bloom:String(x&&x.bloom||'understand')}).filter(x=>x.text).slice(0,7);
+ r.facts=(Array.isArray(r.facts)?r.facts:[]).map(String).filter(Boolean).slice(0,40);
+ r.terms=(Array.isArray(r.terms)?r.terms:[]).filter(t=>t&&t.term&&t.definition).slice(0,10);
+ r.gaps=(Array.isArray(r.gaps)?r.gaps:[]).map(String).filter(Boolean);
+ return r;
+}
+
+/* ---- stage 2: one rich lesson ---- */
+function lessonPrompt(bp,mi,li,o,doc,retryNote){
+ const m=bp.modules[mi], l=m.lessons[li];
+ const outline=bp.modules.map((mm,a)=>`${a+1}. ${mm.title}: `+mm.lessons.map((x,b)=>`${a===mi&&b===li?'**':''}${x.title}${a===mi&&b===li?'**':''}`).join(' > ')).join('\n');
+ const kindRule={concept:'Explain the idea clearly with a concrete example, then check understanding.',process:'Teach the process as a timeline of steps (tl), then apply it in a short scenario or ordering check.',policy:'State the rule precisely (from facts), show who does what and when (tbl), list exceptions (acc), warn about the common mistakes.',scenario:'Mostly practice: a short setup, then 1-2 realistic decision scenarios (br) with consequence feedback on EVERY option, then a debrief call.',reference:'Make it scannable: a table or flip cards of key terms/thresholds, a quick checklist, and one quick check.'}[l.kind]||'';
+ return `You are a senior instructional designer writing ONE lesson of a professional microlearning course for Tamara employees (Saudi fintech, buy-now-pay-later). Quality bar: a top corporate academy, not a summary of the document.
+Write all learner-facing text in ${LNG(o)}.
+COURSE: ${bp.title} (level ${o.level})
+OBJECTIVES:\n${bp.objectives.map((x,i)=>`${i+1}. ${x.text}`).join('\n')}
+COURSE OUTLINE (bold = this lesson; do not repeat other lessons):\n${outline}
+THIS LESSON: "${l.title}" (kind: ${l.kind}, about ${l.minutes} minutes)\nFOCUS: ${l.focus}
+FACT SHEET (the only policy facts you may state):\n${bp.facts.map(f=>'- '+f).join('\n')||'- (none extracted; stay close to the source)'}
+${bp.terms.length?'KEY TERMS:\n'+bp.terms.map(t=>`- ${t.term}: ${t.definition}`).join('\n'):''}
+
+LESSON DESIGN RULES
+1. Open with a hook: a "text" block whose heading is a real situation or question the employee faces, followed by 1-2 sentences on why it matters in their daily work.
+2. Chunk the content: 3-5 content blocks, each text block at most ~80 words, plain language, active voice, address the learner as "you". Use the block type that fits the content (tl for processes, tbl for comparisons/thresholds/roles, acc for exceptions and FAQs, flip for terms) instead of walls of text.
+3. Include one worked example set in Tamara's world (customers, merchants, the app, support, operations). Names and amounts in examples may be illustrative, but every rule, number, deadline and owner must come from the FACT SHEET. Do not invent policy.
+4. Add at least one "call" of kind err or warn (a common mistake) and one of kind tip when natural.
+5. Practice: 2-3 knowledge checks of at least TWO DIFFERENT types, application-level (situations, not recall of wording). Every check has a "why" (mcq/ms/sa) or consequence feedback (br). Distractors must be plausible misconceptions, never silly. No "all of the above".
+6. ${kindRule}
+7. Close with a "call" of kind info titled as Key takeaways with 3-4 bullets, each line starting with "• ".
+8. Total length about ${Math.round(l.minutes*95)} words of reading text (excluding checks). Be specific and useful; cut filler.
+${retryNote?'\nFIX THIS FROM YOUR PREVIOUS ATTEMPT: '+retryNote+'\n':''}
+${SCHEMA}
+Return JSON only: {"title":"${l.title.replace(/"/g,"'")}","minutes":${l.minutes},"blocks":[ ... ]}
+
+SOURCE DOCUMENT (${doc.name}):
+"""
+${doc.text.slice(0,40000)}
+"""`;
+}
+function checkLesson(blocks){
+ const kinds=new Set(blocks.map(b=>b.t)), probs=[];
+ if(blocks.length<6) probs.push('too few blocks (need at least 6)');
+ if(!blocks.some(b=>CHECKS.includes(b.t))) probs.push('no knowledge check');
+ if(!blocks.some(b=>b.t==='call')) probs.push('no call block');
+ if(blocks.filter(b=>CHECKS.includes(b.t)).length&&new Set(blocks.filter(b=>CHECKS.includes(b.t)).map(b=>b.t)).size<2&&blocks.filter(b=>CHECKS.includes(b.t)).length>1) probs.push('use at least two different check types');
+ if(words(blocks.map(flat).join(' '))<140) probs.push('content too thin');
+ if(blocks.length&&blocks.every(b=>b.t==='text')) probs.push('only text blocks; use richer block types');
+ return probs;
+}
+async function genLesson(bp,mi,li,o,doc,sig){
+ let note='',best=null;
+ for(let a=0;a<2;a++){
+  try{
+   const j=await sampleFn.json(lessonPrompt(bp,mi,li,o,doc,note),{modelTier:'default',signal:sig,max_tokens:4000,cache:false});
+   const raw=Array.isArray(j)?j:(j&&j.blocks)||[];
+   const blocks=raw.map(b=>{ try{ return normBlock(b,false); }catch(_){ return null; } }).filter(Boolean);
+   const probs=checkLesson(blocks);
+   if(!best||blocks.length>best.blocks.length) best={blocks,min:+(j&&j.minutes)||bp.modules[mi].lessons[li].minutes,probs};
+   if(!probs.length) return {...best,probs:[]};
+   note=probs.join('; ');
+  }catch(e){ if(e&&(e.code==='aborted'||e.code==='not_granted'||e.code==='rate_limited'||e.name==='AbortError')) throw e; note='the previous reply was not valid JSON; return strictly valid JSON'; }
+ }
+ return best;
+}
+
+/* ---- stage 3: final exam ---- */
+async function genExam(bp,lessons,o,doc,sig){
+ const n=+o.qn||8;
+ const digest=lessons.map(x=>`## ${x.title}\n`+x.blocks.map(flat).join(' ').slice(0,900)).join('\n');
+ const p=`You are an assessment designer. Write the FINAL EXAM for this Tamara course.
+Write in ${LNG(o)}.
+COURSE: ${bp.title}
+OBJECTIVES:\n${bp.objectives.map((x,i)=>`${i}. [${x.bloom}] ${x.text}`).join('\n')}
+FACT SHEET:\n${bp.facts.map(f=>'- '+f).join('\n')}
+COURSE CONTENT DIGEST:\n${digest}
+RULES: exactly ${n} multiple-choice questions, 4 options, exactly one correct. At least 60% must be scenario/application questions (a short realistic situation, then "what should you do?"), the rest understanding. Cover every objective at least once (give the objective index in "obj"). Distractors reflect real misconceptions and are similar in length and tone to the correct answer. No "all/none of the above", no trick questions, no negative phrasing. Every answer must be verifiable from the FACT SHEET or source. Each question stands alone. "why" explains why the correct option is right and why the most tempting wrong one is not (2 sentences).
+Return JSON only: {"questions":[{"q":"","a":["","","",""],"c":0,"why":"","obj":0,"level":"remember|understand|apply|analyze"}]}
+SOURCE DOCUMENT (${doc.name}):
+"""
+${doc.text.slice(0,30000)}
+"""`;
+ const j=await sampleFn.json(p,{modelTier:'default',signal:sig,max_tokens:4000,cache:false});
+ const arr=(Array.isArray(j)?j:(j&&j.questions)||[]).filter(q=>q&&q.q&&Array.isArray(q.a)&&q.a.length>=3);
+ const qs=arr.slice(0,n).map(q=>{ const opts=q.a.map(String).slice(0,5); const c=Math.min(Math.max(+q.c||0,0),opts.length-1); const idx=shuffle(opts.map((_,i)=>i)); return {q:String(q.q),a:idx.map(i=>opts[i]),c:idx.indexOf(c),why:String(q.why||''),obj:+q.obj,level:String(q.level||'')}; });
+ if(!qs.length) throw {code:'bad'};
+ return qs;
+}
+
+/* ---- stage 4: QA review ---- */
+async function review(bp,lessons,qs,o,doc,sig){
+ try{
+  const body=lessons.map(x=>`## ${x.title}\n`+x.blocks.map(flat).join(' ').slice(0,1800)).join('\n');
+  const exam=qs.map((q,i)=>`Q${i+1}. ${q.q} | options: ${q.a.map((a,k)=>(k===q.c?'*':'')+a).join(' / ')}`).join('\n');
+  const p=`You are a strict compliance reviewer and instructional-quality auditor. Compare the generated course against the SOURCE DOCUMENT.
+Find: (1) statements, numbers, deadlines or rules in the course that are NOT supported by the source, or contradict it; (2) exam questions whose marked answer (*) is wrong or ambiguous; (3) objectives not actually taught; (4) important source content that was left out.
+Write issues in ${o.lang==='الإنجليزية'?'English':'Arabic'}. Be precise: name the lesson or question. If the course is faithful, return an empty issues list; never invent problems.
+Return JSON only: {"issues":[{"where":"lesson title or Q number","problem":"","severity":"high|medium|low"}],"scores":{"accuracy":1,"clarity":1,"engagement":1,"coverage":1}}   (scores 1-5)
+OBJECTIVES:\n${bp.objectives.map((x,i)=>`${i}. ${x.text}`).join('\n')}
+GENERATED COURSE:\n${body}
+EXAM:\n${exam}
+SOURCE DOCUMENT:
+"""
+${doc.text.slice(0,40000)}
+"""`;
+  const j=await sampleFn.json(p,{modelTier:'default',signal:sig,max_tokens:2500,cache:false});
+  const issues=(Array.isArray(j&&j.issues)?j.issues:[]).filter(i=>i&&i.problem).map(i=>({where:String(i.where||''),problem:String(i.problem),severity:['high','medium','low'].includes(i.severity)?i.severity:'low'}));
+  const sc=j&&j.scores||{}; const num=v=>Math.min(5,Math.max(1,Math.round(+v||0)))||null;
+  return {issues,scores:{accuracy:num(sc.accuracy),clarity:num(sc.clarity),engagement:num(sc.engagement),coverage:num(sc.coverage)}};
+ }catch(e){ if(e&&(e.code==='aborted'||e.name==='AbortError')) throw e; return null; }
+}
+
+/* ---- orchestrator ---- */
+const _old=window.genRun;
+window.genRun=async function(){
+ if(!(LIVE&&LIVE.on)||typeof sampleFn!=='function') return _old.apply(this,arguments);
+ const g=GEN, o=g.opt, doc=g.doc; g.busy=true; g.chars=0; g.err=null; g.note=''; g.prog=''; RENDER.gen();
+ g.ctrl=new AbortController(); const sig=g.ctrl.signal; const t0=Date.now();
+ try{
+  prog(T2('يقرأ المستند ويستخرج الأهداف والحقائق الأساسية…','Reading the document and extracting objectives and key facts…'));
+  const bp=await analyse(doc,o,sig);
+  const jobs=[]; bp.modules.forEach((m,a)=>m.lessons.forEach((l,b)=>jobs.push([a,b])));
+  let done=0; const skipped=[];
+  prog(T2(`يكتب الدروس التفاعلية (0 من ${jobs.length})…`,`Writing interactive lessons (0 of ${jobs.length})…`));
+  const res=await pool(jobs,3,async([a,b])=>{
+   let r=null; try{ r=await genLesson(bp,a,b,o,doc,sig); }catch(e){ if(e&&(e.code==='aborted'||e.code==='not_granted'||e.code==='rate_limited'||e.name==='AbortError')) throw e; }
+   done++; prog(T2(`يكتب الدروس التفاعلية (${done} من ${jobs.length})…`,`Writing interactive lessons (${done} of ${jobs.length})…`));
+   return r; },sig);
+  const lessonsFlat=[]; const modules=bp.modules.map((m,a)=>({title:m.title,lessons:m.lessons.map((l,b)=>{
+   const idx=jobs.findIndex(j=>j[0]===a&&j[1]===b), r=res[idx];
+   if(!r||!r.blocks.length){ skipped.push(l.title); return null; }
+   const blocks=r.blocks.slice();
+   if(a===0&&b===0&&bp.objectives.length) blocks.unshift({t:'call',k:'tip',h:T2('بنهاية هذا الكورس ستكون قادرًا على','By the end of this course you will be able to'),x:bp.objectives.map(x=>'• '+x.text).join('\n')});
+   lessonsFlat.push({title:l.title,blocks});
+   return {type:'تفاعلي',title:l.title,dur:T2(`${r.min||l.minutes} دقائق`,`${r.min||l.minutes} min`),body:JSON.stringify({v:1,blocks}),_n:blocks.length,_issues:r.probs};
+  }).filter(Boolean)})).filter(m=>m.lessons.length);
+  if(!modules.length) throw {code:'bad'};
+  prog(T2('يبني الاختبار النهائي من الأهداف…','Building the final exam from the objectives…'));
+  let qs=[]; try{ qs=await genExam(bp,lessonsFlat,o,doc,sig); }catch(e){ if(e&&(e.code==='aborted'||e.name==='AbortError'||e.code==='not_granted'||e.code==='rate_limited')) throw e; }
+  prog(T2('يراجع الجودة والدقة مقابل المستند…','Checking quality and accuracy against the source…'));
+  const rv=await review(bp,lessonsFlat,qs,o,doc,sig);
+  const notes=[];
+  (rv?rv.issues.filter(i=>i.severity!=='low'):[]).forEach(i=>notes.push((i.where?i.where+': ':'')+i.problem));
+  bp.gaps.forEach(x=>notes.push(x));
+  skipped.forEach(t=>notes.push(T2(`تعذّر بناء درس «${t}». أضفه يدويًا.`,`Could not build the lesson "${t}". Add it manually.`)));
+  if(!qs.length) notes.push(T2('لم يُنشأ الاختبار النهائي. أضف أسئلة من مركز الكورس.','The final exam was not created. Add questions from the course hub.'));
+  const nl=modules.reduce((s,m)=>s+m.lessons.length,0), mins=modules.reduce((s,m)=>s+m.lessons.reduce((q,l)=>q+(parseInt(l.dur)||5),0),0);
+  g.result={title:bp.title||doc.name,description:bp.description||'',audience:bp.audience&&bp.audience.length?bp.audience.map(String):[T2('جميع الموظفين','All employees')],level:['أساسي','متوسط','متقدم'].includes(bp.level)?bp.level:o.level,duration:T2(`${mins} دقيقة`,`${mins} min`),
+   modules,questions:qs.map(q=>({q:q.q,a:q.a,c:q.c,why:q.why})),review_notes:notes.slice(0,12),objectives:bp.objectives,_pro:true,quality:rv&&rv.scores,qa_ran:!!rv,secs:Math.round((Date.now()-t0)/1000),nlessons:nl};
+  g.ai=true; g.step=3;
+ }catch(e){
+  if(e&&(e.name==='AbortError'||e.code==='aborted')){ g.busy=false; RENDER.gen(); return; }
+  if(e&&e.code==='not_granted'){ g.busy=false; g.ai=false; g.result=null; g.step=2; g.err={t:T2('المساعد غير متاح','The assistant is unavailable'),d:T2('لم يُفعَّل المساعد بعد من إدارة المنصة.','The assistant has not been enabled by platform administration yet.')}; RENDER.gen(); return; }
+  g.err=e&&e.code==='rate_limited'?{t:T2('وصلنا لحد الطلبات مؤقتًا','Request limit reached for now'),d:T2('انتظر دقيقة ثم حاول مرة أخرى.','Wait a minute and try again.')}:{t:T2('لم يكتمل إنشاء الكورس','The course could not be completed'),d:T2('حاول مرة أخرى، أو قسّم المستند إلى جزء أقصر.','Try again, or split the document into a shorter part.')};
+ }
+ g.busy=false; RENDER.gen();
+};
+
+/* ---- review screen: rich preview, objectives, quality ---- */
+const _rg2=RENDER.gen;
+RENDER.gen=function(){
+ const r0=_rg2.apply(this,arguments);
+ try{
+  const g=GEN, r=g.result; const root=document.getElementById('v-gen'); if(!root||g.step!==3||!r||!r._pro||g.busy) return r0;
+  let k=0;
+  root.querySelectorAll('.mprev').forEach((mp,mi)=>{ const m=r.modules[mi]; if(!m) return; mp.querySelectorAll('details.lprev').forEach((d,li)=>{ const l=m.lessons[li]; if(!l) return; let doc=null; try{ doc=JSON.parse(l.body); }catch(_){}
+    const b=d.querySelector('.body'); if(b&&doc){ b.style.whiteSpace='normal'; b.innerHTML='<div class="rich" style="padding-top:6px">'+richBlocks(doc,'prev',{id:'gen-prev'})+'</div>'; }
+    const s=d.querySelector('.lt'); if(s) s.textContent=T2('تفاعلي','Interactive'); }); });
+  const side=root.querySelector('aside.col'); const first=root.querySelector('.col .panel');
+  if(first&&r.objectives&&r.objectives.length&&!root.querySelector('#gobj')){ first.insertAdjacentHTML('afterend',`<section class="panel" id="gobj"><h2>${T2('أهداف التعلم','Learning objectives')}</h2><ul style="margin:8px 0 0;padding-inline-start:20px;line-height:1.9">${r.objectives.map(x=>`<li>${esc(x.text)}</li>`).join('')}</ul></section>`); }
+  if(side&&r.quality&&!root.querySelector('#gqa')){
+   const sc=r.quality, lab={accuracy:T2('الدقة','Accuracy'),clarity:T2('الوضوح','Clarity'),engagement:T2('التفاعل','Engagement'),coverage:T2('التغطية','Coverage')};
+   side.insertAdjacentHTML('afterbegin',`<section class="panel" id="gqa"><h2>${T2('مراجعة الجودة الآلية','Automated quality review')}</h2><p class="sub" style="margin:0 0 8px">${T2('تقييم المساعد لنفسه مقابل المستند، وليس بديلًا عن مراجعة بشرية.','The assistant’s check of its own output against the document. Not a substitute for human review.')}</p><div class="facts">${Object.keys(lab).filter(x=>sc[x]).map(x=>`<span>${lab[x]} ${sc[x]}/5</span>`).join('')}</div><p class="meta" style="margin:8px 0 0">${T2(`${r.nlessons} دروس تفاعلية · ${r.questions.length} أسئلة · استغرق التوليد ${r.secs} ثانية`,`${r.nlessons} interactive lessons · ${r.questions.length} questions · generated in ${r.secs}s`)}</p></section>`); }
+ }catch(e){ try{ console.warn('gen preview',e); }catch(_){} }
+ return r0;
+};
+})();
+
 LIVE.openEnrollment=openEnrollment; window.__live=LIVE; LIVE.refreshMe=refreshMe;
 })();
 
