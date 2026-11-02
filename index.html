@@ -2821,7 +2821,7 @@ RENDER.login=()=>{
    <div class="auth-row"><label class="remember"><input type="checkbox" id="auth-rem" ${AUTH.remember?'checked':''}>تذكّرني على هذا الجهاز</label></div>
    <button class="btn btn-ghost cont" type="submit">متابعة</button>
   </form>
-  <div class="demo"><b>حسابات تجريبية للعرض</b><div class="demo-g">${DEMO.map(([r,i,n,l])=>`<button data-a="demo-login" data-r="${r}"><span class="av">${i}</span><span>${n}<small>${l}</small></span></button>`).join('')}</div></div>
+  ${/[?&]demo=1/.test(location.search)?`<div class="demo"><b>حسابات تجريبية للعرض</b><div class="demo-g">${DEMO.map(([r,i,n,l])=>`<button data-a="demo-login" data-r="${r}"><span class="av">${i}</span><span>${n}<small>${l}</small></span></button>`).join('')}</div></div>`:''}
   <p class="auth-note">نموذج أولي: لا تُطلب كلمة مرور، والدخول محاكاة.</p>`;
  $('#auth-form').addEventListener('submit',e=>{ e.preventDefault(); const v=$('#auth-email').value.trim(); AUTH.email=v; AUTH.remember=$('#auth-rem').checked;
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)){ AUTH.err=v?'أدخل بريد عمل صحيحًا، مثل name@company.com':'أدخل بريد العمل أولًا'; RENDER.login(); $('#auth-email').focus(); return; }
@@ -3073,9 +3073,7 @@ RENDER.login=()=>{
    <span class="ferr" id="auth-err" role="alert">${esc(AUTH.err)}</span>
    <div class="auth-row"><label class="remember"><input type="checkbox" id="auth-rem" ${AUTH.remember?'checked':''}>تذكّرني على هذا الجهاز</label></div>
    <button class="btn btn-primary cont" type="submit">دخول</button>
-  </form>
-  <div class="demo"><b>حسابات تجريبية للعرض</b><div class="demo-g">${DEMO_ACC.map(([e,i,n,l])=>`<button data-a="demo-login" data-e="${e}"><span class="av">${i}</span><span>${n}<small>${l}</small></span></button>`).join('')}</div></div>
-  <p class="auth-note">حسابات العرض بكلمة مرور موحّدة، وتعمل على بيانات تجريبية.</p>`;
+  </form>`;
  $('#auth-form').addEventListener('submit',e=>{ e.preventDefault(); const em=$('#auth-email').value.trim(), pw=$('#auth-pw').value; AUTH.email=em; AUTH.remember=$('#auth-rem').checked;
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)){ AUTH.err=em?'أدخل بريدًا صحيحًا.':'أدخل البريد أولًا.'; RENDER.login(); return; }
   if(!pw){ AUTH.err='أدخل كلمة المرور.'; RENDER.login(); $('#auth-pw').focus(); return; }
@@ -3400,7 +3398,7 @@ let uQ='';
 function drawUsers(){ const U=LIVE.usr, ca=U.can_admin, canMgr=ca||isRole('lms_specialist'); let list=U.users; if(uQ.trim()){ const q=uQ.trim().toLowerCase(); list=list.filter(u=>(u.name||'').toLowerCase().includes(q)||(u.email||'').toLowerCase().includes(q)); }
  if(uFilter==='new') list=list.filter(u=>userState(u)==='جديد'); if(uFilter==='left') list=list.filter(u=>['غادر الشركة','معطّل'].includes(userState(u)));
  const f=[['all','الكل'],['new','الجدد'],['left','المغادرون والمعطّلون']];
- $('#v-users').innerHTML=`<section class="hero"><h1>المستخدمون</h1><p>${U.total.toLocaleString('en')} حسابًا في المنصة.${ca?'':' تعطيل الحسابات وتغيير أدوار الإدارة من صلاحية مسؤول المنصة.'}${canMgr?' يمكنك إضافة الموظفين وتحديد دورهم (موظف أو مدير) ومديرهم المباشر.':''}</p>${canMgr?'<div style="margin-top:12px"><button class="btn btn-primary" data-a="u-add">إضافة مستخدم</button></div>':''}</section>
+ $('#v-users').innerHTML=`<section class="hero"><h1>المستخدمون</h1><p>${U.total.toLocaleString('en')} حسابًا في المنصة.${ca?'':' تعطيل الحسابات وتغيير أدوار الإدارة من صلاحية مسؤول المنصة.'}${canMgr?' يمكنك إضافة الموظفين وتحديد دورهم (موظف أو مدير) ومديرهم المباشر.':''}</p>${canMgr?'<div style="margin-top:12px"><button class="btn btn-primary" data-a="u-add">إضافة مستخدم</button> <button class="btn btn-ghost" data-a="u-import">'+T('استيراد من CSV','Import from CSV')+'</button></div>':''}</section>
  <section class="panel"><div class="toolbar"><div class="chips">${f.map(([k,l])=>`<button data-a="uf" data-f="${k}" aria-pressed="${uFilter===k}">${l}</button>`).join('')}</div><input id="u-q" type="search" placeholder="ابحث بالاسم أو البريد" value="${esc(uQ)}" style="font:inherit;padding:8px 14px;border:1px solid var(--line);border-radius:999px;min-width:220px"><span class="sel">${list.length.toLocaleString('en')} حسابًا</span></div>
   <div class="tbl-wrap"><table><thead><tr><th>الاسم</th><th>الإدارة</th><th>المدير المباشر</th><th>الدولة</th><th>الدور في المنصة</th><th>الحالة</th><th>آخر دخول</th><th></th></tr></thead><tbody>
   ${list.slice(0,200).map(u=>{ const st=userState(u), rl=roleLabel(u.roles), pa=u.roles.includes('platform_admin'), can=ca&&u.status==='active'&&!pa;
@@ -4661,6 +4659,29 @@ ACT['sc-done']=async()=>{ const rt=SC.rt; if(!rt||!rt.api) return; if(rt.test){ 
 window.addEventListener('message',e=>{ const rt=SC.rt, fr=document.querySelector('#sc-frame iframe'); if(!rt||!fr||e.source!==fr.contentWindow) return; if(e.data&&e.data.type==='tamara:complete') ACT['sc-done'](); });
 
 LIVE.openEnrollment=openEnrollment; window.__live=LIVE; LIVE.refreshMe=refreshMe;
+/* ---------- bulk CSV import ---------- */
+function csvRows(t){ return t.replace(/^\uFEFF/,'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>l.split(',').map(x=>x.trim().replace(/^"|"$/g,''))); }
+Object.assign(ACT,{
+ 'u-import':()=>{ $('#ud-t').textContent=T('استيراد مستخدمين','Import users');
+  $('#ud-b').innerHTML=`<p class="meta">${T('الأعمدة: الاسم، البريد، المسمى، الإدارة، الدور (employee أو manager)، بريد المدير. يُنشأ المديرون أولًا. تظهر كلمات المرور المؤقتة مرة واحدة.','Columns: name, email, title, department, role (employee or manager), manager email. Managers are created first. Temporary passwords appear once.')}</p><label>${T('ملف CSV','CSV file')}<input id="ui-file" type="file" accept=".csv,text/csv"></label><label>${T('أو الصق الصفوف هنا','Or paste rows here')}<textarea id="ui-txt" rows="7" dir="ltr" style="width:100%"></textarea></label><p class="meta" id="ud-msg" style="margin:0"></p>`;
+  $('#ud-f').innerHTML=`<button class="btn btn-primary" data-a="u-import-run">${T('ابدأ الاستيراد','Start import')}</button><button class="btn btn-ghost" data-a="u-cancel">${T('إلغاء','Cancel')}</button>`; $('#udlg').showModal(); },
+ 'u-import-run':async b=>{ const f=$('#ui-file').files[0]; let txt=$('#ui-txt').value; if(f) txt=await f.text();
+  let rows=csvRows(txt); if(rows.length&&/email|بريد/i.test(rows[0].join(','))&&!/@/.test(rows[0].join(','))) rows=rows.slice(1);
+  rows=rows.filter(r=>/^[^@\s]+@[^@\s]+$/.test(r[1]||'')); if(!rows.length){ $('#ud-msg').textContent=T('لا توجد صفوف صالحة.','No valid rows.'); return; }
+  b.disabled=true; const dm=new Map((LIVE.usr?LIVE.usr.depts:[]).map(d=>[d.name,d.id])); const out=[]; const ids=new Map();
+  const ex=await safe(()=>rpc('lms_users')); if(ex) ex.users.forEach(u=>u.email&&ids.set(u.email.toLowerCase(),u.id));
+  const ordered=[...rows.filter(r=>(r[4]||'')==='manager'),...rows.filter(r=>(r[4]||'')!=='manager')];
+  for(const r of ordered){ const [name,email,title,dep,role,mgr]=r; const mid=mgr?ids.get(mgr.toLowerCase())||null:null;
+   $('#ud-msg').textContent=`${out.length+1}/${ordered.length}`;
+   const res=await safe(()=>rpc('lms_create_user',{p_name:name,p_email:email,p_title:title||'',p_department:dm.get(dep)||null,p_manager:mid,p_role:role==='manager'?'manager':'employee'}));
+   out.push([name,email,role||'employee',res?res.temp_password:'FAILED']);
+   if(role==='manager'){ const e2=await safe(()=>rpc('lms_users')); if(e2) e2.users.forEach(u=>u.email&&ids.set(u.email.toLowerCase(),u.id)); } }
+  const csv='name,email,role,temp_password\n'+out.map(r=>r.join(',')).join('\n');
+  $('#ud-t').textContent=T('اكتمل الاستيراد','Import finished');
+  $('#ud-b').innerHTML=`<p class="meta">${T('انسخ كلمات المرور الآن؛ لن تظهر مرة أخرى.','Copy the passwords now; they will not be shown again.')}</p><textarea readonly rows="10" dir="ltr" style="width:100%">${esc(csv)}</textarea>`;
+  $('#ud-f').innerHTML=`<button class="btn btn-primary" data-a="u-copy" data-t="${esc(csv)}">${T('انسخ الكل','Copy all')}</button><button class="btn btn-ghost" data-a="u-done">${T('تم','Done')}</button>`; LIVE.usr=null; }
+});
+
 })();
 
 </script>
