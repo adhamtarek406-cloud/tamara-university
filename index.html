@@ -1091,6 +1091,30 @@ dialog{max-width:min(640px,calc(100vw - 32px));border-radius:var(--radius-lg)}
 img,svg,video,iframe{max-width:100%}
 .toast{max-width:calc(100vw - 32px)}
 @media (max-width:640px){main{padding-top:var(--s5);padding-bottom:var(--s7)}}
+
+/* assistant v2 */
+.mwrap{align-self:flex-end;max-width:92%;display:grid;gap:4px}
+[dir="ltr"] .mwrap{align-self:flex-start}
+.mwrap .msg{max-width:100%}
+.msg.md{white-space:normal}
+.msg.md ul{margin:8px 0;padding-inline-start:20px}
+.msg.md li{margin:2px 0}
+.msg .cite{color:var(--brand-text);font-weight:700}
+.mmeta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:0 4px}
+.srcs{display:flex;flex-wrap:wrap;gap:4px}
+.src{font-size:12px;color:var(--brand-text);background:var(--primary-softer);border-radius:999px;padding:4px 12px}
+.rate{display:flex;gap:4px;margin-inline-start:auto}
+.rate button{border:0;background:transparent;border-radius:999px;width:32px;height:32px;font-size:15px;opacity:.55;line-height:1}
+.rate button:hover,.rate button.on{opacity:1;background:var(--primary-softer)}
+.linkbtn{background:none;border:0;padding:0;color:var(--brand-text);font:inherit;text-decoration:underline;cursor:pointer}
+.kbform{display:grid;gap:var(--s3)}
+.kbstats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s3)}
+.kbstats div{background:var(--bg);border-radius:16px;padding:var(--s4);display:grid;gap:var(--s1)}
+.kbstats b{font-size:24px;color:var(--ink);line-height:1.1}
+.kbstats span{font-size:13px;color:var(--muted)}
+.gaps{list-style:none;margin:0;padding:0;display:grid;gap:var(--s2)}
+.gaps li{display:flex;justify-content:space-between;gap:var(--s3);padding:var(--s3);background:var(--bg);border-radius:12px;font-size:14px}
+.gaps b{color:var(--brand-text);white-space:nowrap}
 /* ===== end design system layer ===== */
 </style>
 </head>
@@ -1247,6 +1271,7 @@ img,svg,video,iframe{max-width:100%}
   <section class="view" id="v-builder" hidden></section>
   <section class="view" id="v-rules" hidden></section>
   <section class="view" id="v-users" hidden></section>
+  <section class="view" id="v-kb" hidden></section>
   <section class="view" id="v-scorm" hidden></section>
   <section class="view" id="v-gen" hidden></section>
   <section class="view" id="v-gplay" hidden></section>
@@ -1815,7 +1840,7 @@ document.addEventListener('click',async e=>{
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ if($('#drawer').classList.contains('open'))closeDrawer(); else if($('#asst').classList.contains('open'))closeAsst(); }});
 const ICX='<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
 /* ---------- LMS specialist ---------- */
-ROLES.lms={user:['ريان الحربي','أخصائي نظام إدارة التعلم','ر'],nav:[['ops','لوحة التشغيل'],['builder','الكورسات'],['rules','التعيين التلقائي'],['users','المستخدمون']],start:'ops'};
+ROLES.lms={user:['ريان الحربي','أخصائي نظام إدارة التعلم','ر'],nav:[['ops','لوحة التشغيل'],['builder','الكورسات'],['rules','التعيين التلقائي'],['users','المستخدمون'],['kb','قاعدة المعرفة']],start:'ops'};
 SUGS.lms=['ما أهم ما يحتاج انتباهي اليوم؟','اقترح قاعدة تعيين لموظفي خدمة العملاء','كيف أرفع نسبة إتمام حماية البيانات؟'];
 const isPub=p=>!p.status||p.status==='published';
 S.programs.forEach(p=>{p.status='published';p.enrolled=p.req?1039:p.enr?Math.round(80+p.id*13):Math.round(20+p.id*9);p.updated=p.req?'1 أكتوبر 2026':'أغسطس 2026';});
@@ -4383,7 +4408,7 @@ document.addEventListener('input',e=>{ if(e.target&&e.target.id==='u-q'){ uQ=e.t
 
 /* ---------- English translations for new features ---------- */
 (()=>{ const ADD={
-'جارٍ تسجيل الدخول…':'Signing in…','نتحقق من حسابك.':'Verifying your account.','نسخة تجريبية':'Demo version','الامتحانات':'Assessments',
+'جارٍ تسجيل الدخول…':'Signing in…','نتحقق من حسابك.':'Verifying your account.','نسخة تجريبية':'Demo version','قاعدة المعرفة':'Knowledge base','الامتحانات':'Assessments',
 'الدرس التالي في مسارك':'Next lesson on your path','آخر ما فتحته.':'The last thing you opened.',
 'يجيب حاليًا من بياناتك داخل المنصة. الربط بنموذج Claude يحتاج إعدادًا من فريق التقنية.':'Currently answers from your data inside the platform. Connecting an AI model needs setup by the tech team.',
 'التبديل إلى العربية':'Switch to Arabic','بيانات تجريبية للاختبار وجمع الملاحظات':'Demo data for testing and collecting feedback',
@@ -4740,6 +4765,109 @@ scUpdateSide=function(){ _scu(); try{ const rt=SC.rt, el=$('#sc-side'); if(!rt||
  el.insertAdjacentHTML('beforeend',`<section class="panel"><h2>إكمال الكورس</h2><p class="sub">بعد أن تنهي المحتوى، اضغط الزر ليُسجَّل إتمامك.</p><button class="btn btn-primary" data-a="sc-done">أكملت الكورس</button></section>`); }catch(_){} };
 ACT['sc-done']=async()=>{ const rt=SC.rt; if(!rt||!rt.api) return; if(rt.test){ toast('وضع الاختبار: لا يُسجَّل الإتمام.'); return; } const a=rt.api; try{ a.LMSInitialize(''); a.LMSSetValue('cmi.core.lesson_status','completed'); a.LMSCommit(''); a.LMSFinish(''); }catch(_){} };
 window.addEventListener('message',e=>{ const rt=SC.rt, fr=document.querySelector('#sc-frame iframe'); if(!rt||!fr||e.source!==fr.contentWindow) return; if(e.data&&e.data.type==='tamara:complete') ACT['sc-done'](); });
+
+/* ---------- smart assistant: auto language, live context, memory, feedback, knowledge base ---------- */
+const ASST={fn:URL_+'/functions/v1/rapid-task', down:false};
+const ROLE_LBL={emp:'employee',mgr:'manager (team lead)',adm:'executive (university dean)',lms:'LMS specialist / platform operator'};
+const mdLite=t=>{ let h=esc(String(t||'')); h=h.replace(/\*\*([^*\n]+)\*\*/g,'<b>$1</b>'); const out=[]; let ul=false;
+ h.split('\n').forEach(l=>{ const m=l.match(/^\s*(?:[-•*]|\d+[.)])\s+(.*)/); if(m){ if(!ul){ out.push('<ul>'); ul=true; } out.push('<li>'+m[1]+'</li>'); } else { if(ul){ out.push('</ul>'); ul=false; } out.push(l.trim()?l+'<br>':''); } });
+ if(ul) out.push('</ul>'); return out.join('').replace(/(<br>)+$/,'').replace(/\[(\d)\]/g,'<sup class="cite">$1</sup>'); };
+const lessonText=l=>{ let b=l&&l.body; if(!b) return ''; if(typeof b==='string'&&b[0]==='{'){ try{ const o=JSON.parse(b); const parts=[]; const walk=v=>{ if(typeof v==='string'){ if(v.length>2) parts.push(v); } else if(Array.isArray(v)) v.forEach(walk); else if(v&&typeof v==='object') Object.values(v).forEach(walk); }; walk(o.blocks||o); b=parts.join('\n'); }catch(_){} }
+ return String(b).replace(/\|/g,'\n').slice(0,2500); };
+function liveCtx(){
+ const role=S.role, d={page:S.view};
+ try{
+  if(S.me) d.me={name:S.me.name,title:S.me.role,learning_hours_this_year:S.me.hours,hours_target:S.me.target};
+  d.my_enrollments=(LIVE.E||[]).filter(e=>e.visible!==false).slice(0,30).map(e=>({title:e.title,type:e.type,mandatory:!!e.is_mandatory,status:e.status,progress:e.pct+'%',due:e.due_date||null}));
+  d.my_certificates=(S.certs||[]).slice(0,15).map(c=>({title:c.title,date:c.date}));
+  d.catalog=(S.programs||[]).slice(0,40).map(p=>({title:p.t,type:p.type,level:p.level,duration:p.dur,enrolled:!!p.enr,required:!!p.req,status:p.status}));
+  if(role==='mgr'&&LIVE.team) d.my_team=LIVE.team.slice(0,40).map(m=>({name:m.n,title:m.r,status:mstatus(m).l,aml_pct:m.c.aml,pdpl_pct:m.c.pdpl,cyber_pct:m.c.cyber,hours:m.h,last_active:m.last}));
+  if(role==='adm'&&LIVE.exec) d.university={headcount:LIVE.exec.headcount,departments:(S.depts||[]).map(x=>({name:x.n,headcount:x.hc,aml:x.aml,pdpl:x.pdpl,cyber:x.cyber})),countries:S.countries,overdue:LIVE.exec.overdue};
+  if(role==='lms'){ const P=LIVE.lmsP||[]; d.platform={courses:P.length,by_status:P.reduce((a,p)=>(a[p.status]=(a[p.status]||0)+1,a),{})}; }
+  if(S.view==='player'&&PL.d&&PL.cur){ const l=curL(); if(l) d.current_lesson={course:PL.d.program&&PL.d.program.title,title:l.title,type:l.ltype||l.kind,content:lessonText(l)}; }
+ }catch(_){}
+ return d; }
+const asstPost=async(body,retry=true)=>{ const r=await fetch(ASST.fn,{method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+(LIVE.tok&&LIVE.tok.at),'Content-Type':'application/json'},body:JSON.stringify(body)});
+ if(r.status===401&&retry&&await refresh()) return asstPost(body,false); const j=await r.json().catch(()=>({})); return {status:r.status,j}; };
+const _ask0=window.ask;
+window.ask=async function(q){
+ if(!LIVE.on||ASST.down) return _ask0(q);
+ q=String(q||'').trim(); if(busy||!q) return; busy=true; const inp=$('#asst-in'); if(inp) inp.value='';
+ chat.push({role:'user',content:q}); const ans={role:'assistant',content:T('يفكّر…','Thinking…'),think:true}; chat.push(ans); renderChat();
+ const turns=chat.filter(m=>m!==ans&&!m.think&&!m.local).map(m=>({role:m.role,content:m.content}));
+ try{
+  const {status,j}=await asstPost({action:'chat',messages:turns,context:liveCtx(),role:ROLE_LBL[S.role]||'employee',name:(S.me&&S.me.name)||'',ui_lang:LANG});
+  if(status===429){ ans.content=T('وصلنا لحد الأسئلة مؤقتًا. حاول بعد دقيقة.','Too many questions for now. Try again in a minute.'); ans.think=false; }
+  else if(status===404||status===501||(status>=500&&!j.text)){ chat.splice(chat.indexOf(ans),2); busy=false; ASST.down=status!==502; return _ask0(q); }
+  else if(!j.text){ ans.content=T('تعذّر الاتصال بالمساعد حاليًا. حاول بعد قليل.','The assistant is unavailable right now. Please try again shortly.'); ans.think=false; }
+  else { Object.assign(ans,{content:j.text,think:false,id:j.log_id,sources:j.sources||[],followups:j.followups||[],can:j.can_answer!==false}); }
+ }catch(e){ ans.content=T('تعذّر الاتصال بالمساعد حاليًا. حاول بعد قليل.','The assistant is unavailable right now. Please try again shortly.'); ans.think=false; }
+ busy=false; renderChat(); };
+window.renderChat=function(){
+ const box=$('#msgs'); const nm=((ROLES[S.role]&&ROLES[S.role].user[0])||'').split(' ')[0];
+ if(!chat.length){ box.innerHTML=`<div class="msg a md" dir="auto">${esc(T(`أهلًا ${nm}، أنا المساعد التعليمي. اسألني بالعربية أو الإنجليزية عن تعلّمك أو سياسات تمارا، وسأرد بلغتك.`,`Hi ${nm}, I'm the learning assistant. Ask me in Arabic or English about your learning or Tamara's policies, and I'll answer in your language.`))}</div>`; }
+ else box.innerHTML=chat.map((m,i)=>{ if(m.role==='user') return `<div class="msg u" dir="auto">${esc(m.content)}</div>`;
+  if(m.think) return `<div class="msg a think">${esc(m.content)}</div>`;
+  const src=(m.sources&&m.sources.length)?`<div class="srcs">${m.sources.map(s=>`<span class="src"><sup>${s.n}</sup> ${esc(s.title)}</span>`).join('')}</div>`:'';
+  const rate=(m.id&&!m.local)?`<div class="rate"><button data-a="asst-rate" data-i="${i}" data-v="1" aria-pressed="${m.rating===1}" aria-label="${T('إجابة مفيدة','Helpful')}" class="${m.rating===1?'on':''}">👍</button><button data-a="asst-rate" data-i="${i}" data-v="-1" aria-pressed="${m.rating===-1}" aria-label="${T('إجابة غير مفيدة','Not helpful')}" class="${m.rating===-1?'on':''}">👎</button></div>`:'';
+  return `<div class="mwrap"><div class="msg a md" dir="auto">${mdLite(m.content)}</div>${src||rate?`<div class="mmeta">${src}${rate}</div>`:''}</div>`; }).join('');
+ const lastA=[...chat].reverse().find(m=>m.role==='assistant'&&!m.think);
+ const fu=(chat.length&&lastA&&lastA.followups)?lastA.followups:null;
+ const sugs=chat.length?(fu||[]):SUGS[S.role]||[];
+ $('#sugs').innerHTML=sugs.map(s=>`<button data-a="${chat.length?'asst-fu':'sug'}">${esc(s)}</button>`).join('');
+ box.scrollTop=1e6; };
+Object.assign(ACT,{
+ 'asst-fu':b=>ask(b.textContent),
+ 'asst-rate':async b=>{ const m=chat[+b.dataset.i]; if(!m||!m.id) return; const v=+b.dataset.v; m.rating=m.rating===v?0:v; renderChat(); try{ await rpc('assistant_rate',{p_id:m.id,p_rating:m.rating}); }catch(_){} if(m.rating===-1) toast(T('شكرًا، سجّلنا ملاحظتك لتحسين الإجابات.','Thanks, we noted it to improve answers.')); },
+ 'asst-mem':async()=>{ const m=await safe(()=>rpc('assistant_memory_get')); const has=m&&(m.summary||m.level||(m.weak_topics&&m.weak_topics.length)||m.pref_lang);
+  const txt=has?[m.pref_lang?T('اللغة المفضلة: ','Preferred language: ')+m.pref_lang:'',m.level?T('المستوى: ','Level: ')+m.level:'',(m.weak_topics&&m.weak_topics.length)?T('مواضيع تحتاج دعمًا: ','Topics to support: ')+m.weak_topics.join('، '):'',m.summary||''].filter(Boolean).join('\n'):T('لا أتذكر شيئًا عنك بعد. كلما تحدثنا أكثر تعرّفت على أسلوبك ومستواك.','I don\'t remember anything about you yet. The more we talk, the better I learn your style and level.');
+  chat.push({role:'assistant',content:txt,local:true}); renderChat(); },
+ 'asst-forget':async()=>{ const ok=await rpcOk('assistant_memory_clear',{}); if(ok) toast(T('تم مسح ذاكرة المساعد عنك.','Assistant memory about you was cleared.')); } });
+const _rcAs=window.renderChrome;
+window.renderChrome=function(){ _rcAs(); const note=document.querySelector('.asst-note'); if(note&&LIVE.on) note.innerHTML=`${esc(T('يجيب من بياناتك وقاعدة معرفة تمارا ويتعلّم تفضيلاتك. قد يخطئ، فراجع القرارات المهمة.','Answers from your data and the Tamara knowledge base, and learns your preferences. It can make mistakes; double-check important decisions.'))} <button class="linkbtn" data-a="asst-mem">${esc(T('ماذا يتذكر؟','What does it remember?'))}</button> · <button class="linkbtn" data-a="asst-forget">${esc(T('امسح ذاكرتي','Forget me'))}</button>`; };
+
+/* ---------- knowledge base page (LMS specialist) ---------- */
+const KB={docs:null,ins:null,busy:false,msg:''};
+async function kbText(file){ const n=file.name.toLowerCase(); const ext=n.split('.').pop();
+ if(['txt','md','csv','json'].includes(ext)) return file.text();
+ if(['html','htm'].includes(ext)){ const d=new DOMParser().parseFromString(await file.text(),'text/html'); d.querySelectorAll('script,style').forEach(x=>x.remove()); d.querySelectorAll('p,div,li,h1,h2,h3,h4,h5,h6,tr,br,section').forEach(x=>x.append('\n')); return (d.body.textContent||'').replace(/\n{3,}/g,'\n\n'); }
+ if(ext==='docx'){ await ensureZipLib(); const z=await JSZip.loadAsync(await file.arrayBuffer()); const f=z.file('word/document.xml'); if(!f) throw new Error('docx'); const x=await f.async('string');
+  return x.replace(/<\/w:p>/g,'\n\n').replace(/<w:tab\/>/g,'\t').replace(/<w:br[^>]*\/>/g,'\n').replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'"); }
+ if(ext==='pdf'){ if(!window.pdfjsLib){ await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'; s.onload=res; s.onerror=()=>rej(new Error('pdf_lib')); document.head.appendChild(s); }); pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }
+  const pdf=await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise; let out=''; for(let i=1;i<=Math.min(pdf.numPages,200);i++){ const pg=await pdf.getPage(i); const tc=await pg.getTextContent(); out+=tc.items.map(it=>it.str+(it.hasEOL?'\n':' ')).join('')+'\n\n'; } return out; }
+ throw new Error('unsupported'); }
+async function drawKb(){ const v=$('#v-kb'); const L=(a,e)=>T(a,e);
+ const I=KB.ins, D=KB.docs||[]; const pct=(a,b)=>b?Math.round(100*a/b)+'%':'—';
+ v.innerHTML=`<section class="hero"><h1>${L('قاعدة المعرفة','Knowledge base')}</h1><p>${L('ارفع سياسات وأدلة تمارا، فيجيب المساعد منها مع ذكر المصدر. ما ينقصه تراه أسفل في «أسئلة بلا إجابة».','Upload Tamara policies and guides; the assistant answers from them and cites the source. What it is missing shows below under “Unanswered questions”.')}</p></section>
+ <div class="grid"><div class="col">
+  <section class="panel"><h2>${L('إضافة مصدر','Add a source')}</h2><p class="sub">${L('ملفات Word أو PDF أو نص أو HTML، أو الصق النص مباشرة.','Word, PDF, text or HTML files, or paste the text directly.')}</p>
+   <div class="kbform"><label>${L('العنوان','Title')}<input id="kb-title" maxlength="200" placeholder="${L('مثال: سياسة الإجازات','e.g. Leave policy')}"></label>
+   <label>${L('ملف','File')}<input id="kb-file" type="file" accept=".docx,.pdf,.txt,.md,.html,.htm,.csv"></label>
+   <label>${L('أو الصق النص','Or paste text')}<textarea id="kb-text" rows="6" dir="auto"></textarea></label>
+   <p class="meta" id="kb-msg" role="status">${esc(KB.msg)}</p>
+   <div><button class="btn btn-primary" data-a="kb-add" ${KB.busy?'disabled':''}>${KB.busy?L('جارٍ الفهرسة…','Indexing…'):L('أضف للقاعدة','Add to knowledge base')}</button></div></div></section>
+  <section class="panel"><h2>${L('المصادر','Sources')} (${D.length})</h2>
+   ${D.length?`<div class="tbl-wrap"><table><thead><tr><th>${L('العنوان','Title')}</th><th>${L('الأجزاء','Chunks')}</th><th>${L('الحجم','Size')}</th><th>${L('أُضيف','Added')}</th><th></th></tr></thead><tbody>${D.map(d=>`<tr><td><b>${esc(d.title)}</b></td><td>${d.chunks}</td><td>${Math.round(d.chars/1000)}K</td><td>${esc(new Date(d.at).toLocaleDateString(LANG==='en'?'en-GB':'ar-SA'))}</td><td><button class="rowbtn" data-a="kb-del" data-id="${d.id}">${L('حذف','Delete')}</button></td></tr>`).join('')}</tbody></table></div>`:`<p class="empty">${L('لا مصادر بعد. أضف أول ملف.','No sources yet. Add your first file.')}</p>`}</section>
+ </div><div class="col">
+  <section class="panel"><h2>${L('أداء المساعد (30 يومًا)','Assistant performance (30 days)')}</h2>
+   ${I?`<div class="kbstats"><div><b>${I.total}</b><span>${L('سؤال','questions')}</span></div><div><b>${pct(I.up,I.up+I.down)}</b><span>${L('إجابات مفيدة','helpful')}</span></div><div><b>${pct(I.kb_hit,I.total)}</b><span>${L('من قاعدة المعرفة','from KB')}</span></div><div><b>${I.users}</b><span>${L('مستخدم','users')}</span></div></div>`:`<p class="empty">${L('جارٍ التحميل…','Loading…')}</p>`}</section>
+  <section class="panel"><h2>${L('أسئلة بلا إجابة','Unanswered questions')}</h2><p class="sub">${L('أسئلة لم يجد لها المساعد جوابًا أو قيّمها الموظفون سلبيًا. أضف مصدرًا يغطيها.','Questions the assistant could not answer or that people rated down. Add a source that covers them.')}</p>
+   ${I&&I.gaps&&I.gaps.length?`<ul class="gaps">${I.gaps.map(g=>`<li><span>${esc(g.q)}</span><b>×${g.n}</b></li>`).join('')}</ul>`:`<p class="empty">${L('لا فجوات حتى الآن.','No gaps so far.')}</p>`}</section>
+ </div></div>`; }
+RENDER.kb=async()=>{ const v=$('#v-kb'); if(!LIVE.on){ v.innerHTML=`<section class="hero"><h1>${T('قاعدة المعرفة','Knowledge base')}</h1><p>${T('تتوفر في النسخة المتصلة بقاعدة البيانات.','Available in the database-connected version.')}</p></section>`; return; }
+ if(!KB.docs) load('#v-kb'); const [d,i]=await Promise.all([safe(()=>rpc('kb_list')),safe(()=>rpc('assistant_insights',{p_days:30}))]); if(!d) return; KB.docs=d; KB.ins=i; drawKb(); };
+Object.assign(ACT,{
+ 'kb-add':async b=>{ const title=$('#kb-title').value.trim(), f=$('#kb-file').files[0]; let text=$('#kb-text').value; const msg=$('#kb-msg');
+  if(!title){ msg.textContent=T('اكتب عنوانًا للمصدر.','Enter a title.'); return; }
+  try{ if(f) text=await kbText(f); }catch(e){ msg.textContent=T('تعذّرت قراءة الملف. جرّب Word أو PDF نصي، أو الصق النص.','Could not read the file. Try Word or a text PDF, or paste the text.'); return; }
+  if(!text||text.trim().length<40){ msg.textContent=T('النص قصير أو فارغ.','The text is too short or empty.'); return; }
+  KB.busy=true; KB.msg=T('جارٍ الفهرسة، قد يستغرق دقيقة للملفات الكبيرة…','Indexing, large files can take a minute…'); drawKb();
+  try{ const {status,j}=await asstPost({action:'ingest',title,text}); if(status===200&&j.ok){ KB.msg=''; toast(T(`أُضيف المصدر (${j.chunks} جزءًا).`,`Source added (${j.chunks} chunks).`)); KB.docs=null; }
+   else if(status===404) KB.msg=T('دالة المساعد غير منشورة بعد. انشرها من Supabase أولًا.','The assistant function is not deployed yet.');
+   else if(status===403) KB.msg=T('ليست لديك صلاحية.','You do not have permission.');
+   else KB.msg=T('تعذّرت الفهرسة. حاول مرة أخرى.','Indexing failed. Try again.')+(j.detail?' '+j.detail:''); }catch(e){ KB.msg=T('تعذّر الاتصال.','Connection failed.'); }
+  KB.busy=false; await RENDER.kb(); },
+ 'kb-del':async b=>{ if(!confirm(T('حذف هذا المصدر نهائيًا؟','Delete this source permanently?'))) return; const ok=await rpcOk('kb_delete',{p_doc:b.dataset.id}); if(ok){ KB.docs=null; await RENDER.kb(); toast(T('حُذف المصدر.','Source deleted.')); } } });
 
 LIVE.openEnrollment=openEnrollment; window.__live=LIVE; LIVE.refreshMe=refreshMe;
 /* ---------- bulk CSV import ---------- */
