@@ -4775,32 +4775,31 @@ const mdLite=t=>{ let h=esc(String(t||'')); h=h.replace(/\*\*([^*\n]+)\*\*/g,'<b
 const lessonText=l=>{ let b=l&&l.body; if(!b) return ''; if(typeof b==='string'&&b[0]==='{'){ try{ const o=JSON.parse(b); const parts=[]; const walk=v=>{ if(typeof v==='string'){ if(v.length>2) parts.push(v); } else if(Array.isArray(v)) v.forEach(walk); else if(v&&typeof v==='object') Object.values(v).forEach(walk); }; walk(o.blocks||o); b=parts.join('\n'); }catch(_){} }
  return String(b).replace(/\|/g,'\n').slice(0,2500); };
 function liveCtx(){
- const role=S.role, d={page:S.view};
+ const d={page:S.view,ui_language:LANG};
  try{
-  if(S.me) d.me={name:S.me.name,title:S.me.role,learning_hours_this_year:S.me.hours,hours_target:S.me.target};
-  d.my_enrollments=(LIVE.E||[]).filter(e=>e.visible!==false).slice(0,30).map(e=>({title:e.title,type:e.type,mandatory:!!e.is_mandatory,status:e.status,progress:e.pct+'%',due:e.due_date||null}));
-  d.my_certificates=(S.certs||[]).slice(0,15).map(c=>({title:c.title,date:c.date}));
-  d.catalog=(S.programs||[]).slice(0,40).map(p=>({title:p.t,type:p.type,level:p.level,duration:p.dur,enrolled:!!p.enr,required:!!p.req,status:p.status}));
-  if(role==='mgr'&&LIVE.team) d.my_team=LIVE.team.slice(0,40).map(m=>({name:m.n,title:m.r,status:mstatus(m).l,aml_pct:m.c.aml,pdpl_pct:m.c.pdpl,cyber_pct:m.c.cyber,hours:m.h,last_active:m.last}));
-  if(role==='adm'&&LIVE.exec) d.university={headcount:LIVE.exec.headcount,departments:(S.depts||[]).map(x=>({name:x.n,headcount:x.hc,aml:x.aml,pdpl:x.pdpl,cyber:x.cyber})),countries:S.countries,overdue:LIVE.exec.overdue};
-  if(role==='lms'){ const P=LIVE.lmsP||[]; d.platform={courses:P.length,by_status:P.reduce((a,p)=>(a[p.status]=(a[p.status]||0)+1,a),{})}; }
+  if(S.me) d.me={name:S.me.name,title:S.me.role};
   if(S.view==='player'&&PL.d&&PL.cur){ const l=curL(); if(l) d.current_lesson={course:PL.d.program&&PL.d.program.title,title:l.title,type:l.ltype||l.kind,content:lessonText(l)}; }
+  if(S.view==='builder'||S.view==='users'||S.view==='kb'||S.view==='ops') d.screen_hint='LMS specialist workspace: '+S.view;
  }catch(_){}
  return d; }
+const orgCtx=async()=>{};
+const TOOL_LBL={get_my_learning:['تعلّمك','your learning'],get_my_skills:['مهاراتك','your skills'],get_my_calendar:['تقويمك','your calendar'],get_my_assessments:['امتحاناتك','your exams'],verify_certificate:['التحقق من شهادة','certificate check'],get_team:['فريقك','your team'],get_team_skills:['مهارات الفريق','team skills'],get_pending_approvals:['طلبات الموافقة','approvals'],get_university_overview:['أرقام الجامعة','university numbers'],get_org_stats:['إحصاءات المؤسسة','org stats'],get_recent_certificates:['أحدث الشهادات','recent certificates'],get_ops_overview:['لوحة التشغيل','operations'],list_courses:['الكورسات','courses'],get_course_report:['تقرير كورس','course report'],get_course_learners:['متعلّمو الكورس','course learners'],list_rules:['قواعد التعيين','assignment rules'],list_accounts:['الحسابات','accounts'],list_all_assessments:['الامتحانات','exams'],get_assessment_report:['تقرير امتحان','exam report'],list_knowledge_docs:['قاعدة المعرفة','knowledge base']};
+const toolChip=m=>{ const t=(m.tools||[]).map(n=>TOOL_LBL[n]?TOOL_LBL[n][LANG==='en'?1:0]:null).filter(Boolean); return t.length?`<span class="src tool">🔎 ${esc(T('اطّلع على: ','Looked at: ')+t.join(T('، ',', ')))}</span>`:''; };
 const asstPost=async(body,retry=true)=>{ const r=await fetch(ASST.fn,{method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+(LIVE.tok&&LIVE.tok.at),'Content-Type':'application/json'},body:JSON.stringify(body)});
  if(r.status===401&&retry&&await refresh()) return asstPost(body,false); const j=await r.json().catch(()=>({})); return {status:r.status,j}; };
 const _ask0=window.ask;
 window.ask=async function(q){
  if(!LIVE.on||ASST.down) return _ask0(q);
  q=String(q||'').trim(); if(busy||!q) return; busy=true; const inp=$('#asst-in'); if(inp) inp.value='';
- chat.push({role:'user',content:q}); const ans={role:'assistant',content:T('يفكّر…','Thinking…'),think:true}; chat.push(ans); renderChat();
+ chat.push({role:'user',content:q}); const ans={role:'assistant',content:T('أراجع بيانات الجامعة…','Checking university data…'),think:true}; chat.push(ans); renderChat();
  const turns=chat.filter(m=>m!==ans&&!m.think&&!m.local).map(m=>({role:m.role,content:m.content}));
  try{
+  await orgCtx();
   const {status,j}=await asstPost({action:'chat',messages:turns,context:liveCtx(),role:ROLE_LBL[S.role]||'employee',name:(S.me&&S.me.name)||'',ui_lang:LANG});
   if(status===429){ ans.content=T('وصلنا لحد الأسئلة مؤقتًا. حاول بعد دقيقة.','Too many questions for now. Try again in a minute.'); ans.think=false; }
   else if(status===404||status===501||(status>=500&&!j.text)){ chat.splice(chat.indexOf(ans),2); busy=false; ASST.down=status!==502; return _ask0(q); }
   else if(!j.text){ ans.content=T('تعذّر الاتصال بالمساعد حاليًا. حاول بعد قليل.','The assistant is unavailable right now. Please try again shortly.'); ans.think=false; }
-  else { Object.assign(ans,{content:j.text,think:false,id:j.log_id,sources:j.sources||[],followups:j.followups||[],can:j.can_answer!==false}); }
+  else { Object.assign(ans,{content:j.text,think:false,id:j.log_id,tools:j.tools||[],sources:j.sources||[],followups:j.followups||[],can:j.can_answer!==false}); }
  }catch(e){ ans.content=T('تعذّر الاتصال بالمساعد حاليًا. حاول بعد قليل.','The assistant is unavailable right now. Please try again shortly.'); ans.think=false; }
  busy=false; renderChat(); };
 window.renderChat=function(){
@@ -4808,7 +4807,7 @@ window.renderChat=function(){
  if(!chat.length){ box.innerHTML=`<div class="msg a md" dir="auto">${esc(T(`أهلًا ${nm}، أنا المساعد التعليمي. اسألني بالعربية أو الإنجليزية عن تعلّمك أو سياسات تمارا، وسأرد بلغتك.`,`Hi ${nm}, I'm the learning assistant. Ask me in Arabic or English about your learning or Tamara's policies, and I'll answer in your language.`))}</div>`; }
  else box.innerHTML=chat.map((m,i)=>{ if(m.role==='user') return `<div class="msg u" dir="auto">${esc(m.content)}</div>`;
   if(m.think) return `<div class="msg a think">${esc(m.content)}</div>`;
-  const src=(m.sources&&m.sources.length)?`<div class="srcs">${m.sources.map(s=>`<span class="src"><sup>${s.n}</sup> ${esc(s.title)}</span>`).join('')}</div>`:'';
+  const src=((m.sources&&m.sources.length)||(m.tools&&m.tools.length))?`<div class="srcs">${toolChip(m)}${(m.sources||[]).map(s=>`<span class="src"><sup>${s.n}</sup> ${esc(s.title)}</span>`).join('')}</div>`:'';
   const rate=(m.id&&!m.local)?`<div class="rate"><button data-a="asst-rate" data-i="${i}" data-v="1" aria-pressed="${m.rating===1}" aria-label="${T('إجابة مفيدة','Helpful')}" class="${m.rating===1?'on':''}">👍</button><button data-a="asst-rate" data-i="${i}" data-v="-1" aria-pressed="${m.rating===-1}" aria-label="${T('إجابة غير مفيدة','Not helpful')}" class="${m.rating===-1?'on':''}">👎</button></div>`:'';
   return `<div class="mwrap"><div class="msg a md" dir="auto">${mdLite(m.content)}</div>${src||rate?`<div class="mmeta">${src}${rate}</div>`:''}</div>`; }).join('');
  const lastA=[...chat].reverse().find(m=>m.role==='assistant'&&!m.think);
