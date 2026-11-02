@@ -3398,7 +3398,7 @@ let uQ='';
 function drawUsers(){ const U=LIVE.usr, ca=U.can_admin, canMgr=ca||isRole('lms_specialist'); let list=U.users; if(uQ.trim()){ const q=uQ.trim().toLowerCase(); list=list.filter(u=>(u.name||'').toLowerCase().includes(q)||(u.email||'').toLowerCase().includes(q)); }
  if(uFilter==='new') list=list.filter(u=>userState(u)==='جديد'); if(uFilter==='left') list=list.filter(u=>['غادر الشركة','معطّل'].includes(userState(u)));
  const f=[['all','الكل'],['new','الجدد'],['left','المغادرون والمعطّلون']];
- $('#v-users').innerHTML=`<section class="hero"><h1>المستخدمون</h1><p>${U.total.toLocaleString('en')} حسابًا في المنصة.${ca?'':' تعطيل الحسابات وتغيير أدوار الإدارة من صلاحية مسؤول المنصة.'}${canMgr?' يمكنك إضافة الموظفين وتحديد دورهم (موظف أو مدير) ومديرهم المباشر.':''}</p>${canMgr?'<div style="margin-top:12px"><button class="btn btn-primary" data-a="u-add">إضافة مستخدم</button> <button class="btn btn-ghost" data-a="u-import">'+T('استيراد من CSV','Import from CSV')+'</button></div>':''}</section>
+ $('#v-users').innerHTML=`<section class="hero"><h1>المستخدمون</h1><p>${U.total.toLocaleString('en')} حسابًا في المنصة.${ca?'':' تعطيل الحسابات وتغيير أدوار الإدارة من صلاحية مسؤول المنصة.'}${canMgr?' يمكنك إضافة الموظفين وتحديد دورهم (موظف أو مدير) ومديرهم المباشر.':''}</p>${canMgr?'<div style="margin-top:12px"><button class="btn btn-primary" data-a="u-add">إضافة مستخدم</button> <button class="btn btn-ghost" style="color:#fff;border-color:#fff" data-a="u-import">'+T('استيراد من CSV','Import from CSV')+'</button></div>':''}</section>
  <section class="panel"><div class="toolbar"><div class="chips">${f.map(([k,l])=>`<button data-a="uf" data-f="${k}" aria-pressed="${uFilter===k}">${l}</button>`).join('')}</div><input id="u-q" type="search" placeholder="ابحث بالاسم أو البريد" value="${esc(uQ)}" style="font:inherit;padding:8px 14px;border:1px solid var(--line);border-radius:999px;min-width:220px"><span class="sel">${list.length.toLocaleString('en')} حسابًا</span></div>
   <div class="tbl-wrap"><table><thead><tr><th>الاسم</th><th>الإدارة</th><th>المدير المباشر</th><th>الدولة</th><th>الدور في المنصة</th><th>الحالة</th><th>آخر دخول</th><th></th></tr></thead><tbody>
   ${list.slice(0,200).map(u=>{ const st=userState(u), rl=roleLabel(u.roles), pa=u.roles.includes('platform_admin'), can=ca&&u.status==='active'&&!pa;
@@ -4674,8 +4674,8 @@ Object.assign(ACT,{
   const ordered=[...rows.filter(r=>(r[4]||'')==='manager'),...rows.filter(r=>(r[4]||'')!=='manager')];
   for(const r of ordered){ const [name,email,title,dep,role,mgr]=r; const mid=mgr?ids.get(mgr.toLowerCase())||null:null;
    $('#ud-msg').textContent=`${out.length+1}/${ordered.length}`;
-   const res=await safe(()=>rpc('lms_create_user',{p_name:name,p_email:email,p_title:title||'',p_department:dm.get(dep)||null,p_manager:mid,p_role:role==='manager'?'manager':'employee'}));
-   out.push([name,email,role||'employee',res?res.temp_password:'FAILED']);
+   let res=null, err=''; try{ res=await rpc('lms_create_user',{p_name:name,p_email:email,p_title:title||'',p_department:dm.get(dep)||null,p_manager:mid,p_role:role==='manager'?'manager':'employee'}); }catch(e){ err=String((e&&e.message)||e).replace(/[,\n]/g,' ').slice(0,80); }
+   out.push([name,email,role||'employee',res&&res.temp_password?res.temp_password:'FAILED '+(err||'no-password')]);
    if(role==='manager'){ const e2=await safe(()=>rpc('lms_users')); if(e2) e2.users.forEach(u=>u.email&&ids.set(u.email.toLowerCase(),u.id)); } }
   const csv='name,email,role,temp_password\n'+out.map(r=>r.join(',')).join('\n');
   $('#ud-t').textContent=T('اكتمل الاستيراد','Import finished');
