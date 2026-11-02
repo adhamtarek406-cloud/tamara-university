@@ -4660,14 +4660,15 @@ window.addEventListener('message',e=>{ const rt=SC.rt, fr=document.querySelector
 
 LIVE.openEnrollment=openEnrollment; window.__live=LIVE; LIVE.refreshMe=refreshMe;
 /* ---------- bulk CSV import ---------- */
-function csvRows(t){ return t.replace(/^\uFEFF/,'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>l.split(',').map(x=>x.trim().replace(/^"|"$/g,''))); }
+function csvRows(t){ t=String(t||'').replace(/^﻿/,''); const d=(t.split('\n')[0].match(/;/g)||[]).length>(t.split('\n')[0].match(/,/g)||[]).length?';':(t.indexOf('\t')>-1&&t.indexOf(',')<0?'\t':','); return t.split(/\r\n|\r|\n/).map(l=>l.trim()).filter(Boolean).map(l=>l.split(d).map(x=>x.trim().replace(/^"|"$/g,'').trim())); }
 Object.assign(ACT,{
  'u-import':()=>{ $('#ud-t').textContent=T('استيراد مستخدمين','Import users');
   $('#ud-b').innerHTML=`<p class="meta">${T('الأعمدة: الاسم، البريد، المسمى، الإدارة، الدور (employee أو manager)، بريد المدير. يُنشأ المديرون أولًا. تظهر كلمات المرور المؤقتة مرة واحدة.','Columns: name, email, title, department, role (employee or manager), manager email. Managers are created first. Temporary passwords appear once.')}</p><label>${T('ملف CSV','CSV file')}<input id="ui-file" type="file" accept=".csv,text/csv"></label><label>${T('أو الصق الصفوف هنا','Or paste rows here')}<textarea id="ui-txt" rows="7" dir="ltr" style="width:100%"></textarea></label><p class="meta" id="ud-msg" style="margin:0"></p>`;
   $('#ud-f').innerHTML=`<button class="btn btn-primary" data-a="u-import-run">${T('ابدأ الاستيراد','Start import')}</button><button class="btn btn-ghost" data-a="u-cancel">${T('إلغاء','Cancel')}</button>`; $('#udlg').showModal(); },
- 'u-import-run':async b=>{ const f=$('#ui-file').files[0]; let txt=$('#ui-txt').value; if(f) txt=await f.text();
+ 'u-import-run':async b=>{ const msg=$('#ud-msg'); let txt=$('#ui-txt').value, info='';
+  const f=$('#ui-file').files[0]; if(f){ try{ txt=await f.text(); info=` (${f.name}, ${f.size} B)`; }catch(e){ msg.textContent=T('تعذّرت قراءة الملف؛ اختره من جديد أو الصق محتواه في الخانة.','Could not read the file; pick it again or paste its content below.'); return; } }
   let rows=csvRows(txt); if(rows.length&&/email|بريد/i.test(rows[0].join(','))&&!/@/.test(rows[0].join(','))) rows=rows.slice(1);
-  rows=rows.filter(r=>/^[^@\s]+@[^@\s]+$/.test(r[1]||'')); if(!rows.length){ $('#ud-msg').textContent=T('لا توجد صفوف صالحة.','No valid rows.'); return; }
+  rows=rows.filter(r=>/^[^@\s]+@[^@\s]+$/.test(r[1]||'')); if(!rows.length){ msg.textContent=T('لا توجد صفوف صالحة','No valid rows')+info+` — ${csvRows(txt).length} ${T('سطر مقروء','lines read')}: ${esc(txt.slice(0,60))}`; return; }
   b.disabled=true; const dm=new Map((LIVE.usr?LIVE.usr.depts:[]).map(d=>[d.name,d.id])); const out=[]; const ids=new Map();
   const ex=await safe(()=>rpc('lms_users')); if(ex) ex.users.forEach(u=>u.email&&ids.set(u.email.toLowerCase(),u.id));
   const ordered=[...rows.filter(r=>(r[4]||'')==='manager'),...rows.filter(r=>(r[4]||'')!=='manager')];
