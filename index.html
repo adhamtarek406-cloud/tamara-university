@@ -1025,27 +1025,36 @@ h1{line-height:1.2;letter-spacing:-.01em}
 h2{line-height:1.3}
 h3{line-height:1.4}
 
-/* top bar: one tidy row on wide screens, two rows below 1280px */
-.topbar-in{max-width:var(--page-max);padding:0 var(--gutter);min-height:72px;gap:var(--s4)}
-.brand{gap:var(--s2);flex:none}
+/* top bar: one clean row. Brand | tabs (overflow -> "More") | utilities | account */
+header.topbar{background:var(--nav-bg);box-shadow:none;border-bottom:1px solid var(--line)}
+header.topbar .topbar-in{max-width:var(--page-max);padding:0 var(--gutter);min-height:64px;gap:var(--s5);flex-wrap:nowrap}
+header.topbar .brand{gap:var(--s2);flex:none;font-size:17px}
+header.topbar .brand img{height:28px}
 .demo-pill{display:none!important}
-nav{min-width:0;gap:var(--s1);justify-content:flex-start;scrollbar-width:none}
-nav::-webkit-scrollbar{display:none}
-nav button{padding:8px 16px;font-size:15px}
-.hicon,.langbtn{width:40px;height:40px;min-height:40px;padding:0}
-.langbtn{width:auto;min-width:44px;padding:0 12px}
-.role{gap:0}
-.role>span{display:none}
-.role select{min-height:40px;border-radius:999px;padding:0 12px}
-.user{gap:var(--s2)}
-.topbar-in.nouser .user div{display:none}
-.topbar-in.wrap{flex-wrap:wrap;min-height:0;padding-top:var(--s3);padding-bottom:var(--s2);row-gap:var(--s2)}
-.topbar-in.wrap nav{order:5;flex:1 0 100%;padding-bottom:var(--s1)}
-.topbar-in.wrap .brand{margin-inline-end:auto}
-@media (max-width:640px){
-  .topbar-in{gap:var(--s2)}
-  .role select{max-width:112px}
-  .hicon{width:36px;height:36px;min-height:36px}
+header.topbar nav{flex:1 1 0;min-width:0;gap:var(--s1);overflow:visible;align-items:center}
+header.topbar nav>button,header.topbar .nav-more .more-btn{padding:8px 14px;font-size:14px;font-weight:500;line-height:1.4;min-height:36px;border-radius:999px}
+header.topbar nav>button[aria-current="page"]{font-weight:600}
+header.topbar .hicon,header.topbar .langbtn{height:36px;min-height:36px;border-radius:999px}
+header.topbar .hicon{width:36px;padding:0}
+header.topbar .langbtn{width:auto;min-width:36px;padding:0 12px;font-size:13px}
+header.topbar .role{gap:0;margin-inline-start:var(--s2);padding-inline-start:var(--s3);border-inline-start:1px solid var(--line)}
+header.topbar .role>span{display:none}
+header.topbar .role select{min-height:36px;height:36px;border-radius:999px;padding:0 var(--s3);font-size:13px;font-weight:500;max-width:none}
+header.topbar .user{gap:var(--s2)}
+header.topbar .user div{display:block}
+header.topbar .user small{display:none}
+header.topbar .user b{font-size:13px;font-weight:600}
+header.topbar .avatar{width:36px;height:36px;font-size:14px}
+header.topbar .topbar-in>*{flex:none}
+header.topbar .topbar-in>nav{flex:1 1 0}
+@media (max-width:1100px){header.topbar .user div{display:none}}
+@media (max-width:860px){
+  header.topbar .topbar-in{flex-wrap:wrap;min-height:0;gap:var(--s2);padding-top:var(--s2);padding-bottom:0;padding-inline:var(--s4)}
+  header.topbar .brand{margin-inline-end:auto}
+  header.topbar .role{margin-inline-start:0;padding-inline-start:0;border-inline-start:0}
+  header.topbar .role select{max-width:112px}
+  header.topbar nav{order:5;flex:1 0 100%;overflow-x:auto;scrollbar-width:none;padding-bottom:var(--s2)}
+  header.topbar nav::-webkit-scrollbar{display:none}
 }
 
 /* page frame & vertical rhythm */
@@ -3839,14 +3848,15 @@ Object.assign(ACT,{
  const obs=new MutationObserver(()=>organizeNav());
  function organizeNav(){ obs.disconnect(); try{
    nav.querySelectorAll('.nav-more').forEach(m=>{ [...m.querySelectorAll('.nav-pop>button')].forEach(b=>nav.insertBefore(b,m)); m.remove(); });
-   const btns=[...nav.querySelectorAll(':scope>button[data-go]')]; const w=window.innerWidth;
-   const max=w<=700?99:(w<1100?3:(w<1280?4:7));
-   if(btns.length>max+1){ const cur=btns.find(b=>b.getAttribute('aria-current')==='page'); const keep=btns.slice(0,max); const inKeep=cur?keep.includes(cur):true; if(!inKeep) keep[max-1]=cur;
-    const rest=btns.filter(b=>!keep.includes(b)); const wrap=document.createElement('div'); wrap.className='nav-more';
-    wrap.innerHTML=`<button class="more-btn" data-a="nav-more" aria-haspopup="true" aria-expanded="false" ${rest.includes(cur)?'aria-current="page"':''}>المزيد ▾</button><div class="nav-pop"></div>`;
-    const pop=wrap.querySelector('.nav-pop'); rest.forEach(b=>pop.appendChild(b)); nav.appendChild(wrap); }
+   const btns=[...nav.querySelectorAll(':scope>button[data-go]')]; if(!btns.length||window.innerWidth<=860) return;
+   if(nav.scrollWidth<=nav.clientWidth+1) return;
+   const cur=btns.find(b=>b.getAttribute('aria-current')==='page');
+   const wrap=document.createElement('div'); wrap.className='nav-more';
+   wrap.innerHTML=`<button class="more-btn" data-a="nav-more" aria-haspopup="true" aria-expanded="false">المزيد ▾</button><div class="nav-pop"></div>`; nav.appendChild(wrap); const pop=wrap.querySelector('.nav-pop');
+   for(let i=btns.length-1;i>=0&&nav.scrollWidth>nav.clientWidth+1;i--){ const b=btns[i]; if(b===cur) continue; pop.insertBefore(b,pop.firstChild); }
+   if(!pop.children.length) wrap.remove();
   }finally{ obs.observe(nav,{childList:true}); } }
- obs.observe(nav,{childList:true}); organizeNav(); window.addEventListener('resize',()=>{ clearTimeout(organizeNav.t); organizeNav.t=setTimeout(organizeNav,150); });
+ obs.observe(nav,{childList:true}); organizeNav(); window.addEventListener('resize',()=>{ clearTimeout(organizeNav.t); organizeNav.t=setTimeout(organizeNav,80); }); if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>organizeNav()); setTimeout(organizeNav,400); setTimeout(organizeNav,1500);
  document.addEventListener('click',e=>{ const mb=e.target.closest&&e.target.closest('.more-btn'); const open=nav.querySelector('.nav-more.open');
   if(mb){ e.stopImmediatePropagation(); const m=mb.parentElement; const on=!m.classList.contains('open'); m.classList.toggle('open',on); mb.setAttribute('aria-expanded',on); return; }
   if(open&&!e.target.closest('.nav-pop')){ open.classList.remove('open'); open.querySelector('.more-btn').setAttribute('aria-expanded','false'); } },true);
@@ -4866,14 +4876,6 @@ Object.assign(ACT,{
   KB.busy=false; await RENDER.kb(); },
  'kb-del':async b=>{ if(!confirm(T('حذف هذا المصدر نهائيًا؟','Delete this source permanently?'))) return; const ok=await rpcOk('kb_delete',{p_doc:b.dataset.id}); if(ok){ KB.docs=null; await RENDER.kb(); toast(T('حُذف المصدر.','Source deleted.')); } } });
 
-/* topbar: fit to the available width in any language (drop the user name first, then move the tabs to a second row) */
-(()=>{ let raf=0; const fit=()=>{ const t=document.querySelector('.topbar-in'), n=document.querySelector('#nav'); if(!t||!n||!t.offsetWidth) return;
-  t.classList.remove('nouser','wrap'); const over=()=>n.scrollWidth>n.clientWidth+1||t.scrollWidth>t.clientWidth+1;
-  if(over()){ t.classList.add('nouser'); if(over()) t.classList.add('wrap'); } };
- const q=()=>{ cancelAnimationFrame(raf); raf=requestAnimationFrame(fit); };
- window.addEventListener('resize',q); if(document.fonts&&document.fonts.ready) document.fonts.ready.then(q);
- const t=document.querySelector('.topbar'); if(t){ new MutationObserver(q).observe(t,{childList:true,subtree:true,characterData:true}); }
- document.addEventListener('click',()=>setTimeout(q,60),true); setTimeout(q,300); })();
 
 LIVE.openEnrollment=openEnrollment; window.__live=LIVE; LIVE.refreshMe=refreshMe;
 /* ---------- bulk CSV import ---------- */
