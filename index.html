@@ -1038,12 +1038,10 @@ nav button{padding:8px 16px;font-size:15px}
 .role>span{display:none}
 .role select{min-height:40px;border-radius:999px;padding:0 12px}
 .user{gap:var(--s2)}
-@media (max-width:1439px){.user div{display:none}}
-@media (max-width:1279px){
-  .topbar-in{flex-wrap:wrap;min-height:0;padding-top:var(--s3);padding-bottom:var(--s2);row-gap:var(--s2)}
-  .topbar-in nav{order:5;flex:1 0 100%;padding-bottom:var(--s1)}
-  .topbar-in .brand{margin-inline-end:auto}
-}
+.topbar-in.nouser .user div{display:none}
+.topbar-in.wrap{flex-wrap:wrap;min-height:0;padding-top:var(--s3);padding-bottom:var(--s2);row-gap:var(--s2)}
+.topbar-in.wrap nav{order:5;flex:1 0 100%;padding-bottom:var(--s1)}
+.topbar-in.wrap .brand{margin-inline-end:auto}
 @media (max-width:640px){
   .topbar-in{gap:var(--s2)}
   .role select{max-width:112px}
@@ -4867,6 +4865,15 @@ Object.assign(ACT,{
    else KB.msg=T('تعذّرت الفهرسة. حاول مرة أخرى.','Indexing failed. Try again.')+(j.detail?' '+j.detail:''); }catch(e){ KB.msg=T('تعذّر الاتصال.','Connection failed.'); }
   KB.busy=false; await RENDER.kb(); },
  'kb-del':async b=>{ if(!confirm(T('حذف هذا المصدر نهائيًا؟','Delete this source permanently?'))) return; const ok=await rpcOk('kb_delete',{p_doc:b.dataset.id}); if(ok){ KB.docs=null; await RENDER.kb(); toast(T('حُذف المصدر.','Source deleted.')); } } });
+
+/* topbar: fit to the available width in any language (drop the user name first, then move the tabs to a second row) */
+(()=>{ let raf=0; const fit=()=>{ const t=document.querySelector('.topbar-in'), n=document.querySelector('#nav'); if(!t||!n||!t.offsetWidth) return;
+  t.classList.remove('nouser','wrap'); const over=()=>n.scrollWidth>n.clientWidth+1||t.scrollWidth>t.clientWidth+1;
+  if(over()){ t.classList.add('nouser'); if(over()) t.classList.add('wrap'); } };
+ const q=()=>{ cancelAnimationFrame(raf); raf=requestAnimationFrame(fit); };
+ window.addEventListener('resize',q); if(document.fonts&&document.fonts.ready) document.fonts.ready.then(q);
+ const t=document.querySelector('.topbar'); if(t){ new MutationObserver(q).observe(t,{childList:true,subtree:true,characterData:true}); }
+ document.addEventListener('click',()=>setTimeout(q,60),true); setTimeout(q,300); })();
 
 LIVE.openEnrollment=openEnrollment; window.__live=LIVE; LIVE.refreshMe=refreshMe;
 /* ---------- bulk CSV import ---------- */
