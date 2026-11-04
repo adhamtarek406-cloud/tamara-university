@@ -1718,7 +1718,7 @@ RENDER.admin=()=>{
  const o=orgStats(), wmax=Math.max(...S.weeks.map(w=>w.v));
  $('#v-admin').innerHTML=`<section class="hero split"><div><h1>لوحة إدارة الجامعة</h1><p>حالة التعلم والامتثال في تمارا حتى 19 أكتوبر 2026.</p></div>
   <button class="btn btn-ghost" style="background:#fff;border-color:#fff" data-a="export">صدّر تقرير الامتثال</button></section>
- <div class="kpis"><div class="kpi"><b>${o.hc.toLocaleString('en')}</b><span>موظفًا في ${S.countries.length} دول</span></div>
+ <div class="kpis"><div class="kpi"><b>${o.hc.toLocaleString('en')}</b><span>موظفًا في ${S.countries.length===1?'دولة واحدة':S.countries.length===2?'دولتين':S.countries.length+(S.countries.length<=10?' دول':' دولة')}</span></div>
   <div class="kpi"><b>${o.rate}%</b><span>إتمام التدريب الإلزامي</span><small>${o.live?'على الكورسات الإلزامية':'عبر 3 كورسات إلزامية'}</small></div>
   <div class="kpi"><b>${o.late}</b><span>${o.live?'متأخرون عن موعد الاستحقاق':'متأخرون عن الأمن السيبراني'}</span><small>${o.live?'تدريب إلزامي تجاوز موعده':'انتهى الموعد في 30 سبتمبر'}</small></div>
   ${o.live?'':`<div class="kpi"><b>${o.risk}</b><span>لم يُكملوا مكافحة غسل الأموال</span><small>الموعد بعد 9 أيام</small></div>`}</div>
