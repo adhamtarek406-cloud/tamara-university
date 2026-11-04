@@ -3834,7 +3834,7 @@ Object.assign(ACT,{
     try{ busyUi('جارٍ رفع الحزمة…'); meta.path=`${id}/${Date.now()}.zip`; await pkgUpload(meta.path,file); await rpc('lms_set_scorm',{p_id:id,p_meta:meta}); }
     catch(e){ await rpc('delete_program',{p_id:id}).catch(()=>{}); throw e; }
     $('#scormdlg').close(); LIVE.lmsP=null; await ensureOrg(); if(await openEditor(id,'info')) go('builder'); toast('أُنشئ الكورس من الحزمة كمسودة. راجع المعلومات ثم أرسله للاعتماد.');
-   } else { const p=progOf(); if(!p||p.isNew) return; const old=p.scorm; busyUi('جارٍ رفع الحزمة…'); meta.path=`${p.id}/${Date.now()}.zip`; await pkgUpload(meta.path,file);
+   } else { let p=progOf(); if(!p&&editId&&editId!=='new'){ await openEditor(editId,'content'); p=progOf(); } if(!p||p.isNew){ $('#scormdlg').close(); toast('تعذّر تحميل بيانات الكورس. أعد فتح الكورس من قائمة الكورسات ثم حاول مرة أخرى.'); return; } const old=p.scorm; busyUi('جارٍ رفع الحزمة…'); meta.path=`${p.id}/${Date.now()}.zip`; await pkgUpload(meta.path,file);
     meta.window=old?old.window:meta.window; meta.track=old?old.track:meta.track; meta.history=[...(old?[{name:old.name,size:old.size,uploaded_at:old.uploaded_at,path:old.path}]:[]),...((old&&old.history)||[])].slice(0,10);
     await rpc('lms_set_scorm',{p_id:p.id,p_meta:meta}); $('#scormdlg').close(); await openEditor(p.id,'content'); renderEditor(); toast('رُفعت الحزمة الجديدة، وحُفظ تقدّم المتعلمين الحاليين.'); }
   }catch(e){ const m=(e&&e.message)||''; $('#scormdlg').close(); toast(m==='pkg_too_big'?'حجم الحزمة أكبر من الحد المسموح (50 ميجا).':/forbidden/.test(m)?'ليست لديك صلاحية رفع الحزم.':'تعذّر رفع الحزمة: '+m.slice(0,80)); }
