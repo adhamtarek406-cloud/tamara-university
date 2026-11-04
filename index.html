@@ -1708,6 +1708,8 @@ function orgStats(){
  const hc=S.depts.reduce((a,d)=>a+d.hc,0);
  const per=k=>S.depts.reduce((a,d)=>a+d[k],0);
  const done=per('aml')+per('pdpl')+per('cyber');
+ const lx=(window.__live&&window.__live.on&&window.__live.exec)||null;
+ if(lx) return {hc:lx.headcount||hc,aml:per('aml'),pdpl:per('pdpl'),cyber:per('cyber'),rate:hc?Math.round(done/(hc*3)*100):0,late:lx.overdue||0,risk:Math.max(0,(lx.headcount||hc)-per('aml')),live:true};
  return {hc,aml:per('aml'),pdpl:per('pdpl'),cyber:per('cyber'),rate:Math.round(done/(hc*3)*100),late:hc-per('cyber'),risk:hc-per('aml')};
 }
 const pct=(a,b)=>Math.round(a/b*100);
@@ -1717,9 +1719,9 @@ RENDER.admin=()=>{
  $('#v-admin').innerHTML=`<section class="hero split"><div><h1>لوحة إدارة الجامعة</h1><p>حالة التعلم والامتثال في تمارا حتى 19 أكتوبر 2026.</p></div>
   <button class="btn btn-ghost" style="background:#fff;border-color:#fff" data-a="export">صدّر تقرير الامتثال</button></section>
  <div class="kpis"><div class="kpi"><b>${o.hc.toLocaleString('en')}</b><span>موظفًا في ${S.countries.length} دول</span></div>
-  <div class="kpi"><b>${o.rate}%</b><span>إتمام التدريب الإلزامي</span><small>عبر 3 كورسات إلزامية</small></div>
-  <div class="kpi"><b>${o.late}</b><span>متأخرون عن الأمن السيبراني</span><small>انتهى الموعد في 30 سبتمبر</small></div>
-  <div class="kpi"><b>${o.risk}</b><span>لم يُكملوا مكافحة غسل الأموال</span><small>الموعد بعد 9 أيام</small></div></div>
+  <div class="kpi"><b>${o.rate}%</b><span>إتمام التدريب الإلزامي</span><small>${o.live?'على الكورسات الإلزامية':'عبر 3 كورسات إلزامية'}</small></div>
+  <div class="kpi"><b>${o.late}</b><span>${o.live?'متأخرون عن موعد الاستحقاق':'متأخرون عن الأمن السيبراني'}</span><small>${o.live?'تدريب إلزامي تجاوز موعده':'انتهى الموعد في 30 سبتمبر'}</small></div>
+  <div class="kpi"><b>${o.risk}</b><span>لم يُكملوا مكافحة غسل الأموال</span>${o.live?'':'<small>الموعد بعد 9 أيام</small>'}</div></div>
  <div class="stack">
   <section class="panel"><div class="phead"><div><h2>الامتثال حسب الإدارة</h2><p class="sub">نسبة من أكملوا كل كورس إلزامي. الخلايا الأفتح تحتاج متابعة.</p></div></div>
    <div class="tbl-wrap"><table class="matrix"><thead><tr><th>الإدارة</th>${S.mcourses.map(c=>`<th>${c.t}<br><span style="font-weight:400">${c.due}</span></th>`).join('')}</tr></thead>
