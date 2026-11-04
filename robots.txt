@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://adhamtarek406-cloud.github.io/tamara-university/sitemap.xml
